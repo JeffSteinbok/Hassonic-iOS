@@ -1,0 +1,45 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Install xcpretty
+        run: gem install xcpretty
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build
+        run: |
+          xcodebuild -project Hassonic.xcodeproj -scheme Hassonic \
+            -destination 'generic/platform=iOS Simulator' build
+
+      - name: Test
+        run: |
+          xcodebuild test \
+            -project Hassonic.xcodeproj \
+            -scheme Hassonic \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -resultBundlePath TestResults.xcresult \
+            -only-testing:HassonicTests \
+            2>&1 | xcpretty --color
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TestResults
+          path: TestResults.xcresult

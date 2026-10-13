@@ -1,0 +1,28 @@
+{
+  "id": 2,
+  "type": "event",
+  "event": {
+    "event_type": "state_changed",
+    "data": {
+      "entity_id": "media_player.living_room",
+      "old_state": {
+        "entity_id": "media_player.living_room",
+        "state": "playing",
+        "attributes": {
+          "friendly_name": "Living Room",
+          "volume_level": 0.4,
+          "is_volume_muted": false
+        }
+      },
+      "new_state": {
+        "entity_id": "media_player.living_room",
+        "state": "paused",
+        "attributes": {
+          "friendly_name": "Living Room",
+          "volume_level": 0.4,
+          "is_volume_muted": false
+        }
+      }
+    }
+  }
+}

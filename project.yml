@@ -1,0 +1,206 @@
+name: Hassonic
+options:
+  deploymentTarget:
+    # CarPlay's condensed image rows — the avatar grid the car screen is built
+    # around — are iOS 26 only, so there's no fallback layout to maintain.
+    iOS: "26.0"
+# Bundle IDs, team and sign-in page: see Config/Base.xcconfig.
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+settings:
+  base:
+    # Project-level so the widget extension always matches the app — an
+    # embedded extension with a different version is rejected by App Store
+    # Connect.
+    MARKETING_VERSION: "1.0"
+    # Local builds only. scripts/testflight.sh stamps uploads as YYYYMMDD.HHmm,
+    # so there's nothing to bump here before a release.
+    CURRENT_PROJECT_VERSION: "4"
+packages:
+  FirebaseMessaging:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: "11.0.0"
+  Yams:
+    url: https://github.com/jpsim/Yams.git
+    from: "5.1.3"
+targets:
+  Hassonic:
+    type: application
+    platform: iOS
+    sources:
+      - path: Hassonic
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Every other AppIcon-*.appiconset ships as an alternate icon, and
+        # Xcode lists them in the built Info.plist, which is where the
+        # Settings icon picker finds them. Add one with scripts/add_app_icon.py.
+        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: YES
+        DEVELOPMENT_ASSET_PATHS: "\"Hassonic/Preview Content\""
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: Hassonic/Hassonic.entitlements
+        # CarPlay needs an Apple-granted entitlement that no device
+        # provisioning profile can carry until Apple approves it, so the
+        # CarPlay build of the entitlements is scoped to the simulator,
+        # where entitlements aren't validated. See docs/carplay.md.
+        CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]: Hassonic/HassonicSimulator.entitlements
+        APP_DISPLAY_NAME: $(APP_NAME)
+        CONFIG_FILE_NAME: $(CONFIG_NAME).yaml
+      configs:
+        # Debug installs beside the TestFlight build as its own app: its own
+        # bundle ID, name, DEV-bannered icon and config file. Archives are
+        # Release, so TestFlight never sees these.
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).dev
+          APP_DISPLAY_NAME: $(APP_NAME) Dev
+          CONFIG_FILE_NAME: $(CONFIG_NAME)-dev.yaml
+          ASSETCATALOG_COMPILER_APPICON_NAME: DevAppIcon
+    dependencies:
+      - target: HassonicWidgets
+      - package: FirebaseMessaging
+        product: FirebaseMessaging
+      - package: Yams
+        product: Yams
+    info:
+      path: Hassonic/Info.plist
+      properties:
+        CFBundleDisplayName: "$(APP_DISPLAY_NAME)"
+        # CarPlay labels the app from CFBundleName, not CFBundleDisplayName,
+        # and XcodeGen would otherwise default it to $(PRODUCT_NAME).
+        CFBundleName: "$(APP_DISPLAY_NAME)"
+        ConfigFileName: "$(CONFIG_FILE_NAME)"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # Only HTTPS and WSS, which are exempt. Without this every upload sits
+        # at "Missing Compliance" and no tester can install it.
+        ITSAppUsesNonExemptEncryption: false
+        # Color only: the splash draws the mark with the name and spinner
+        # under it, centered as a group, so a launch-screen mark would jump.
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIApplicationSceneManifest:
+          # CarPlay runs as a second scene alongside the phone window, so the
+          # app has to declare support for multiple scenes.
+          UIApplicationSupportsMultipleScenes: true
+          UISceneConfigurations:
+            CPTemplateApplicationSceneSessionRoleApplication:
+              - UISceneClassName: CPTemplateApplicationScene
+                UISceneConfigurationName: CarPlay
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).CarPlaySceneDelegate
+        BuildGitShortSHA: "unknown"
+        BuildTimestamp: "unknown"
+        BuildConfiguration: "unknown"
+        CFBundleURLTypes:
+          # hassonic:// for links and the OAuth redirect, which the sign-in
+          # page names.
+          - CFBundleURLSchemes:
+              - hassonic
+            CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
+        HAOAuthClientID: "$(HA_OAUTH_CLIENT_ID)"
+        UIBackgroundModes:
+          - remote-notification
+        NSSupportsLiveActivities: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    postBuildScripts:
+      - name: Generate Build Metadata
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+
+          PLIST_PATH="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
+          SHORT_SHA="unknown"
+          if command -v git >/dev/null 2>&1 && git -C "${SRCROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            SHORT_SHA="$(git -C "${SRCROOT}" rev-parse --short=8 HEAD 2>/dev/null || echo unknown)"
+          fi
+
+          set_plist_value() {
+            local key="$1"
+            local value="$2"
+            /usr/libexec/PlistBuddy -c "Set :${key} ${value}" "${PLIST_PATH}" 2>/dev/null ||
+              /usr/libexec/PlistBuddy -c "Add :${key} string ${value}" "${PLIST_PATH}"
+          }
+
+          set_plist_value "BuildGitShortSHA" "${SHORT_SHA}"
+          set_plist_value "BuildTimestamp" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          set_plist_value "BuildConfiguration" "${CONFIGURATION:-unknown}"
+  HassonicWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: HassonicWidgets
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).Widgets
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+        # Shared/ZonesActivityIntents.swift only performs in the app process.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) WIDGET_EXTENSION"
+        APP_DISPLAY_NAME: $(APP_NAME)
+      configs:
+        # An extension's ID has to sit under its app's.
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).dev.Widgets
+          APP_DISPLAY_NAME: $(APP_NAME) Dev
+    info:
+      path: HassonicWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: "$(APP_DISPLAY_NAME)"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+  HassonicTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: HassonicTests
+        includes:
+          - "**/*.swift"
+          - "Fixtures/**/*.json"
+    dependencies:
+      - target: Hassonic
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).Tests
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: YES
+  HassonicUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: HassonicUITests
+    dependencies:
+      - target: Hassonic
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).UITests
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Hassonic:
+    build:
+      targets:
+        Hassonic: all
+        HassonicTests: [test]
+        HassonicUITests: [test]
+    test:
+      gatherCoverageData: false
+      targets:
+        - name: HassonicTests
+        - name: HassonicUITests

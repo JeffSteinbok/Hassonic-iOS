@@ -1,0 +1,33 @@
+# XcodeGen generates these from project.yml — run `xcodegen generate` after cloning
+*.xcodeproj/
+Hassonic/Info.plist
+HassonicWidgets/Info.plist
+
+# Xcode
+xcuserdata/
+DerivedData/
+build/
+*.xcuserstate
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+
+# SwiftPM build products for the standalone dashboard validator
+scripts/config-validator/.build/
+
+# Home Assistant credentials for local Claude Code use — never commit
+.ha.env
+
+# Per-developer identity: bundle ID prefix, team, sign-in page
+Config/Local.xcconfig
+
+# Output of scripts/export_ha_entities.py — a dump of your own Home Assistant
+docs/home-assistant-entities.json
+
+# Your own dashboards (<CONFIG_NAME>.yaml and -dev.yaml), if you keep them
+# beside the code for the scripts in scripts/
+/*.yaml
+!/project.yml

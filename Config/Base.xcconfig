@@ -1,0 +1,28 @@
+// Who this build is. Committed defaults build and run in the simulator as-is;
+// to sign for a device or upload, copy Local.xcconfig.example to
+// Local.xcconfig (gitignored) and set your own values there.
+
+// Every target's bundle ID hangs off APP_BUNDLE_ID: the app is
+// APP_BUNDLE_ID, the widget APP_BUNDLE_ID.Widgets, and Debug adds .dev to
+// both. Set the prefix; override APP_BUNDLE_ID itself only to keep an
+// existing App Store Connect app.
+BUNDLE_ID_PREFIX = com.example
+APP_BUNDLE_ID = $(BUNDLE_ID_PREFIX).Hassonic
+
+// The name under the icon; Debug builds add " Dev".
+APP_NAME = Hassonic
+
+// The dashboard file the app fetches from Home Assistant's www folder:
+// <name>.yaml, and <name>-dev.yaml for Debug builds.
+CONFIG_NAME = hassonic
+
+// Your Apple Developer team ID (Xcode → Settings → Accounts). Empty signs
+// for the simulator only.
+DEVELOPMENT_TEAM =
+
+// The page Home Assistant checks during sign-in: a static page carrying
+// <link rel="redirect_uri" href="hassonic://auth-callback">, which
+// docs/index.html is. `//` starts a comment in an xcconfig, hence `/$()/`.
+HA_OAUTH_CLIENT_ID = https:/$()/jeffsteinbok.github.io/Hassonic-iOS/
+
+#include? "Local.xcconfig"

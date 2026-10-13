@@ -1,0 +1,25 @@
+name: Validate config files
+
+on:
+  push:
+    paths:
+      - 'Hassonic/Config.yaml'
+      - 'Hassonic/AppIconThemes.json'
+  pull_request:
+    paths:
+      - 'Hassonic/Config.yaml'
+      - 'Hassonic/AppIconThemes.json'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Syntax only; the full schema check (scripts/validate_config.sh) needs
+      # Swift and runs with the app's tests.
+      - name: Parse the YAML and JSON
+        run: |
+          pip install pyyaml
+          python3 -c "import yaml; [yaml.safe_load(open(p)) for p in ('Hassonic/Config.yaml',)]"
+          python3 -c "import json; json.load(open('Hassonic/AppIconThemes.json'))"

@@ -1,0 +1,9 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // relay_rate_limits is written only by the Cloud Function service account.
+    match /relay_rate_limits/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

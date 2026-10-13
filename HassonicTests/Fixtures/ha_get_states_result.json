@@ -1,0 +1,26 @@
+{
+  "id": 1,
+  "type": "result",
+  "success": true,
+  "result": [
+    {
+      "entity_id": "media_player.living_room",
+      "state": "playing",
+      "attributes": {
+        "friendly_name": "Living Room",
+        "volume_level": 0.4,
+        "is_volume_muted": false,
+        "source": "Spotify",
+        "source_list": ["Spotify", "AirPlay"]
+      }
+    },
+    {
+      "entity_id": "alarm_control_panel.home",
+      "state": "disarmed",
+      "attributes": {
+        "friendly_name": "Home Alarm",
+        "code_format": "number"
+      }
+    }
+  ]
+}

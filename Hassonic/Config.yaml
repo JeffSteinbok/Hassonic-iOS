@@ -1,0 +1,79 @@
+# Bundled fallback configuration.
+#
+# This is a minimal EXAMPLE, deliberately not any real household: it is what
+# the app falls back to when the Home Assistant copy can't be fetched, so
+# shipping one person's entities here would make their setup everyone's
+# default. Put the real thing at /local/hassonic.yaml on Home Assistant.
+#
+# See docs/configuration.md.
+
+version: 1
+
+pages:
+  - id: home
+    title: Home
+    system_icon: house.fill
+    sections:
+      - title: Example
+        cards:
+          - type: light
+            entity: light.example
+            title: Example Light
+
+  # A People tab: every person.* entity Home Assistant knows, minus whoever
+  # is signed in. Name `entities:` to pin an explicit list and order instead,
+  # or set `excludeSignedInUser: false` to include yourself.
+  - id: people
+    title: People
+    system_icon: person.2.fill
+    sections:
+      - cards:
+          - type: people
+
+# media:
+#   # Naming for whoever serves the music. Omit the whole block and the app
+#   # says nothing about a provider — no logo, no "open the app" button, and
+#   # generic copy. Every service call underneath is stock media_player.
+#   provider:
+#     name: Spotify
+#     urlScheme: "spotify:"     # omit and the open-app buttons disappear
+#     logoAsset: SpotifyLogo    # omit and no logo is shown
+#   accounts:
+#     - id: alex
+#       displayName: Alex          # spoken aloud when claiming a speaker
+#       entityId: media_player.example_account
+#       favorites:
+#         - displayName: Morning
+#           icon: sunrise
+#           contentType: playlist
+#           contentId: "example:playlist:1"
+#       speakers:
+#         - entityId: media_player.kitchen
+#           displayName: Kitchen
+#           sourceName: Kitchen Speaker
+#           icon: speaker.wave.2
+#       groups: []
+
+# Claiming a speaker for an account. Omit this block entirely unless several
+# accounts share the same speakers — a single-account household needs none of
+# it. Every field below is required when the block is present: each names a
+# vendor, a language or a preference, and none of them has a safe default.
+#
+# speakerClaim:
+#   deviceEntityIds: [media_player.kitchen_echo]
+#   command:
+#     contentType: custom                          # "speak this as a command"
+#     phrase: "Switch to {account}'s account"
+#   confirmation:
+#     timestampAttribute: last_called_timestamp
+#     responseAttribute: last_called_response
+#     matches: "in {account}'s account"            # substring of the spoken reply
+#   playback:
+#     phrase: "Play {content} on Spotify on {speaker}"
+#     fallbackContent: "Your Favourites"
+#   timings:                                       # optional — these have defaults
+#     replyTimeoutSeconds: 16
+#     pollIntervalMs: 500
+#     commandCooldownMs: 1500
+#     settleSeconds: 3
+#     attemptsPerDevice: 2

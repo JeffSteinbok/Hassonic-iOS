@@ -1,0 +1,13 @@
+// Copy to Config/Local.xcconfig (gitignored) and fill in. Anything set here
+// overrides Config/Base.xcconfig.
+
+BUNDLE_ID_PREFIX = com.yourname
+// Only to keep an app you already have in App Store Connect:
+// APP_BUNDLE_ID = com.yourname.SomeOtherName
+DEVELOPMENT_TEAM = ABCDE12345
+
+// APP_NAME = My Home
+// CONFIG_NAME = myhome
+
+// Only if you host your own copy of docs/index.html:
+// HA_OAUTH_CLIENT_ID = https:/$()/yourname.github.io/Hassonic-iOS/

@@ -1,0 +1,12 @@
+{
+  "Speaker-Window": { "top": "#F8F5F4", "bottom": "#F8F5F4", "text": "dark" },
+  "Night-Listening": { "top": "#1F2A4D", "bottom": "#1F2A4D", "text": "light" },
+  "Vinyl-Window": { "top": "#F2C46D", "bottom": "#F2C46D", "text": "dark" },
+  "Blue-House": { "top": "#EAF6FD", "bottom": "#EAF6FD", "text": "dark" },
+  "Waveform-House": { "top": "#1A4ED8", "bottom": "#1A4ED8", "text": "light" },
+  "Warm-Waveform-House": { "top": "#F6EBDD", "bottom": "#F6EBDD", "text": "dark" },
+  "Clay-Coral": { "top": "#FFE6D8", "bottom": "#FFC4A8", "text": "dark" },
+  "Clay-Sky": { "top": "#E4F4FE", "bottom": "#A9DCF7", "text": "dark" },
+  "Realistic-Day": { "top": "#6EC1F2", "bottom": "#E6F5FD", "text": "dark" },
+  "Realistic-Dusk": { "top": "#1E2350", "bottom": "#E9876A", "text": "light" }
+}

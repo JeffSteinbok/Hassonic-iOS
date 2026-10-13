@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Hassonic</title>
+  <!--
+    The OAuth2 / IndieAuth client identity page for Hassonic.
+
+    Home Assistant's /auth/authorize endpoint fetches the client_id URL and
+    looks for a <link rel="redirect_uri"> tag matching the app's custom-scheme
+    redirect URI before it will grant an auth code. This page satisfies that
+    check. It holds no secrets and nobody sees it in the normal sign-in flow.
+
+    Served by GitHub Pages from this repo's docs/ folder. The app finds it
+    through HA_OAUTH_CLIENT_ID in Config/Base.xcconfig; a fork can publish
+    its own and point Local.xcconfig at it.
+  -->
+  <link rel="redirect_uri" href="hassonic://auth-callback">
+</head>
+<body>
+  <p>Hassonic – OAuth client identity page.</p>
+</body>
+</html>

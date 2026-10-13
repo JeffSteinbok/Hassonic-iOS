@@ -1,0 +1,31 @@
+{
+  "images" : [
+    {
+      "filename" : "spotify_logo_1x.png",
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
+      "filename" : "spotify_logo_2x.png",
+      "idiom" : "universal",
+      "scale" : "2x"
+    },
+    {
+      "filename" : "spotify_logo_3x.png",
+      "idiom" : "universal",
+      "scale" : "3x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  },
+  "attribution" : {
+    "source" : "Wikimedia Commons, File:Spotify_icon.svg — https://commons.wikimedia.org/wiki/File:Spotify_icon.svg (rasterized from the official SVG mark; public domain per threshold of originality, mark itself remains a Spotify trademark)",
+    "notes" : "Official Spotify icon (green circle, black sound-wave mark) rasterized at 1x/2x/3x. Used solely to identify the Spotify service on an action that opens Spotify. Not modified, distorted, or recolored. No endorsement implied."
+  },
+  "properties" : {
+    "preserves-vector-representation" : false,
+    "template-rendering-intent" : "original"
+  }
+}
