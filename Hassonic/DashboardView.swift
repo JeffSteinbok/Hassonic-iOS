@@ -24,22 +24,47 @@ struct DashboardPageView: View {
         }
     }
 
+    @ViewBuilder private var cards: some View {
+        if let errorMessage = configurationLoader.errorMessage {
+            DashboardConfigurationErrorBanner(message: errorMessage)
+        }
+
+        if !rooms.isEmpty {
+            RoomsStrip(rooms: rooms)
+        }
+
+        ForEach(Array(page.sections.enumerated()), id: \.offset) { _, section in
+            DashboardSectionView(section: section)
+        }
+    }
+
+    /// A page of nothing but remotes is a remote: it fits the screen, shrunk
+    /// as needed on a smaller phone, rather than scrolling.
+    private var fitsScreen: Bool {
+        let cards = page.sections.flatMap(\.cards)
+        return rooms.isEmpty && !cards.isEmpty && cards.allSatisfy {
+            if case .tvRemote = $0 { return true } else { return false }
+        }
+    }
+
     private var content: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
-                if let errorMessage = configurationLoader.errorMessage {
-                    DashboardConfigurationErrorBanner(message: errorMessage)
+            if fitsScreen {
+                // Still in a scroll view, for pull-to-refresh; it never has
+                // anything to scroll.
+                ShrinkToFit {
+                    VStack(alignment: .leading, spacing: 16) { cards }
+                        .padding(.top, 4)
+                        .padding(.bottom, 8)
                 }
-
-                if !rooms.isEmpty {
-                    RoomsStrip(rooms: rooms)
+                .containerRelativeFrame(.vertical)
+            } else {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    cards
                 }
-
-                ForEach(Array(page.sections.enumerated()), id: \.offset) { _, section in
-                    DashboardSectionView(section: section)
-                }
+                .padding(.top, 4)
+                .padding(.bottom)
             }
-            .padding(.vertical)
         }
         .reloadsConfigurationOnPull()
         .navigationTitle(page.title)
@@ -54,6 +79,29 @@ struct DashboardPageView: View {
             if let room = rooms.first(where: { $0.id == roomID }) {
                 DashboardPageView(page: room, isPushed: true)
             }
+        }
+    }
+}
+
+/// Lays its content out at its natural height and scales the whole thing
+/// down, evenly, when that's taller than the space it has. Full width either
+/// way: it's laid out wider by the same factor it's shrunk by.
+private struct ShrinkToFit<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    @State private var naturalHeight: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { proxy in
+            let scale = naturalHeight > proxy.size.height && naturalHeight > 0
+                ? proxy.size.height / naturalHeight
+                : 1
+            content
+                .frame(width: proxy.size.width / scale)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { naturalHeight = $0 }
+                .scaleEffect(scale, anchor: .top)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
     }
 }

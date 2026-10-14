@@ -48,7 +48,9 @@ struct TVRemoteCardView: View {
                          voice: configuration.boxTakesVoice ? BoxPanel.Voice(
                             isListening: voice.state == .listening,
                             caption: voice.state == .listening ? (voice.transcript.isEmpty ? "Listening…" : voice.transcript) : voiceNote,
-                            toggle: toggleVoice
+                            favorites: configuration.voiceFavorites,
+                            toggle: toggleVoice,
+                            send: sendVoice
                          ) : nil,
                          press: { press($0, on: .box) }, showKeypad: { keypad = .box })
                     .disabled(boxIsIdle)
@@ -114,11 +116,7 @@ struct TVRemoteCardView: View {
         }
         voiceNote = nil
         Task {
-            await voice.start { command in
-                presses += 1
-                perform(configuration.voiceActions(command))
-                voiceNote = "“\(command)”"
-            }
+            await voice.start { command in sendVoice(command) }
             switch voice.state {
             case .denied: voiceNote = "Turn on the microphone and speech recognition in Settings"
             case .unavailable: voiceNote = "Voice isn't available right now"
@@ -126,6 +124,13 @@ struct TVRemoteCardView: View {
             }
             voice.reset()
         }
+    }
+
+    /// Sends a command to the box as if it had been spoken.
+    private func sendVoice(_ command: String) {
+        presses += 1
+        perform(configuration.voiceActions(command))
+        voiceNote = "“\(command)”"
     }
 
     private func press(_ key: TVRemoteKey, on side: TVRemoteSide) {
@@ -304,7 +309,10 @@ private struct BoxPanel: View {
         let isListening: Bool
         /// "Listening…", the words so far, or the command just sent.
         let caption: String?
+        /// Saved commands, offered by the favorites key.
+        let favorites: [DashboardTVRemoteConfiguration.VoiceFavorite]
         let toggle: () -> Void
+        let send: (String) -> Void
     }
 
     let name: String
@@ -316,7 +324,8 @@ private struct BoxPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 10) {
+            // Top-aligned, so the name sits where the TV panel's does.
+            HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     PanelCaption(name)
                     if let caption = voice?.caption {
@@ -329,6 +338,9 @@ private struct BoxPanel: View {
                 }
                 Spacer(minLength: 0)
                 if let voice {
+                    if !voice.favorites.isEmpty {
+                        FavoritesKey(favorites: voice.favorites, send: voice.send)
+                    }
                     MicKey(isListening: voice.isListening, action: voice.toggle)
                 }
             }
@@ -422,6 +434,37 @@ private struct MicKey: View {
         }
         .accessibilityLabel(isListening ? "Stop listening" : "Voice command")
         .accessibilityHint(isListening ? "Sends what you've said" : "Say what you'd say into the voice remote, like watch ESPN")
+    }
+}
+
+/// The favorites key: a menu of saved voice commands, each sent as if
+/// spoken.
+private struct FavoritesKey: View {
+    let favorites: [DashboardTVRemoteConfiguration.VoiceFavorite]
+    let send: (String) -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(favorites) { favorite in
+                Button { send(favorite.say) } label: {
+                    if let icon = favorite.icon {
+                        Label(favorite.name, systemImage: icon)
+                    } else {
+                        Text(favorite.name)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "star.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.yellow)
+                .frame(width: 44, height: 44)
+                .background(RemoteColors.boxKey, in: Circle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(PressScaleButtonStyle())
+        .accessibilityLabel("Favorites")
+        .accessibilityHint("Saved voice commands")
     }
 }
 

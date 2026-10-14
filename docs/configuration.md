@@ -129,20 +129,29 @@ must be an SF Symbols name.
   box:
     kind: xfinity
     remote: remote.xfinity
+    favorites:                       # the ★ key's menu
+      - { name: ESPN, say: "watch ESPN", icon: sportscourt.fill }
+      - { name: Kids movies, say: "show me kids movies" }
 ```
 
 | Field | Meaning |
 |---|---|
-| `kind` | `samsung` (the [SamsungTV Smart](https://github.com/ollo69/ha-samsungtv-smart) custom integration, or HA's built-in [Samsung Smart TV](https://www.home-assistant.io/integrations/samsungtv) one; both take the same key codes) or `xfinity` (the [xfinity_remote](https://github.com/jeffsterling/hass-xfinityremote) custom integration). It decides how each key is spelled in `remote.send_command`. |
+| `kind` | `samsung` (the [SamsungTV Smart](https://github.com/ollo69/ha-samsungtv-smart) custom integration, or HA's built-in [Samsung Smart TV](https://www.home-assistant.io/integrations/samsungtv) one; both take the same key codes) or `xfinity` (the [xfinity_remote](https://github.com/JeffSteinbok/hass-xfinityremote) custom integration). It decides how each key is spelled in `remote.send_command`. |
 | `remote` | That integration's `remote.*` entity. |
 | `mediaPlayer` | Optional. For Samsung, play/pause toggles through it; without one the key alternates pause and play. |
 | `name` | Optional; the panel's label. Defaults to "Samsung TV" or "Xfinity". |
 | `power` | Optional `script.*` the power key runs instead of sending the device's own power command. For a Samsung, whose network remote can turn it off but not on, point it at a script that sends the TV's IR power code through an IR blaster such as a Broadlink. |
+| `favorites` | Optional, `xfinity` only. Saved voice commands, offered by the ★ key beside the box panel's voice key: each a `name` for the menu, what to `say`, and an optional SF Symbol `icon`. |
 
 Each device gets its own panel and its keys always go to that device: the `tv`
 panel is drawn like the Samsung remote, the `box` panel like the X1. Either can
 be left out. The 123 key opens a number pad for that device whose digits send as
 you tap them, with Last (previous channel) and Enter.
+
+An `xfinity` box panel has a voice key. Tap it and say what you'd say into the
+box's own voice remote ("watch ESPN", "show me comedies"); the words go to the
+box through the integration's `xfinity_remote.send_text` once you stop talking.
+With `favorites`, a ★ key beside it opens a menu of them.
 
 Each card type is written for one kind of entity or integration: `light`, `cover`,
 `alarm` and `people` work with any entity of their domain, while
@@ -324,7 +333,7 @@ scripts/inject_config.py --clear                   # drop back to Home Assistant
 This writes `Documents/config-override.yaml` into the simulator's app container.
 **Debug builds read that file instead of fetching from Home Assistant** and keep using
 it across reconnects.
-Release builds ignore it entirely. Writing the `sterlinghome.dashboard.lastKnownGoodYAML`
+Release builds ignore it entirely. Writing the `hassonic.dashboard.lastKnownGoodYAML`
 default directly also works, but the next successful fetch overwrites it, so the override
 file is the one that sticks.
 

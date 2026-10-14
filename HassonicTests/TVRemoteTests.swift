@@ -203,6 +203,28 @@ final class TVRemoteTests: XCTestCase {
         XCTAssertEqual(remote.voiceActions("   "), [])
     }
 
+    func testSavedVoiceCommandsComeFromTheBox() throws {
+        let remote = try card("""
+                    box:
+                      kind: xfinity
+                      remote: remote.xfinity
+                      favorites:
+                        - { name: ESPN, say: "watch ESPN", icon: sportscourt.fill }
+                        - { name: Kids, say: "show me kids movies" }
+                        - { name: Blank, say: "" }
+        """)
+        XCTAssertEqual(remote.voiceFavorites.map(\.name), ["ESPN", "Kids"])
+        XCTAssertEqual(remote.voiceFavorites.first?.icon, "sportscourt.fill")
+        XCTAssertEqual(remote.voiceActions(remote.voiceFavorites[1].say), [.sendText(remote: "remote.xfinity", text: "show me kids movies")])
+    }
+
+    func testOnlyAnXfinityBoxOffersSavedCommands() throws {
+        let remote = try card("""
+                    box: { kind: samsung, remote: remote.tv, favorites: [{ name: ESPN, say: "watch ESPN" }] }
+        """)
+        XCTAssertEqual(remote.voiceFavorites, [])
+    }
+
     func testNoBoxMeansNoVoice() throws {
         let remote = try card("""
                     tv: { kind: samsung, remote: remote.tv }
