@@ -2,7 +2,9 @@ import SwiftUI
 
 /// What a long-press on a room hotspot opens: the controls that fit the
 /// device. A light gets brightness (when it dims), a fan its speed, presets
-/// and oscillation, a speaker transport and volume; anything else on/off.
+/// and oscillation, a speaker transport and volume, a switch or cover on/off,
+/// an oven or fridge its mode and temperature, a select its options. A
+/// sensor gets its reading.
 struct DeviceControlSheet: View {
     let entityId: String
     let title: String
@@ -23,7 +25,11 @@ struct DeviceControlSheet: View {
                         case "light": LightControls(entity: entity, symbol: symbol)
                         case "fan": FanControls(entity: entity, symbol: symbol)
                         case "media_player": SpeakerControls(entity: entity)
-                        default: PowerToggle(entity: entity, symbol: symbol)
+                        case "water_heater": ApplianceControls(entity: entity, symbol: symbol)
+                        case "select": OptionControls(entity: entity, symbol: symbol)
+                        case let domain where DashboardRoomCardConfiguration.Hotspot.toggleableDomains.contains(domain):
+                            PowerToggle(entity: entity, symbol: symbol)
+                        default: ReadOnlyStatus(entity: entity, symbol: symbol)
                         }
                     } else {
                         ContentUnavailableView("Not in Home Assistant", systemImage: "questionmark.circle", description: Text(entityId))
@@ -48,6 +54,75 @@ extension HAEntityState {
         case "fan", "media_player": return true
         default: return false
         }
+    }
+
+    /// An oven heating. Only a `water_heater` that can be off counts, so a
+    /// fridge compartment, always "Normal", never reads as running.
+    var isApplianceRunning: Bool {
+        guard attributeStringArray("operation_list")?.contains("off") == true else { return false }
+        return !["off", "unavailable", "unknown"].contains(state)
+    }
+
+    /// The state in words: "Open" for a door, "Dry" for a leak sensor,
+    /// "Bake" for an oven, "37°" for a temperature.
+    var readableState: String {
+        switch state {
+        case "unavailable": return "Unavailable"
+        case "unknown": return "Unknown"
+        default: break
+        }
+        if entityId.hasPrefix("binary_sensor.") {
+            let on = state == "on"
+            switch attributeString("device_class") {
+            case "door", "garage_door", "opening", "window": return on ? "Open" : "Closed"
+            case "moisture": return on ? "Wet" : "Dry"
+            default: return on ? "On" : "Off"
+            }
+        }
+        if let number = Double(state) {
+            let unit = attributeString("unit_of_measurement") ?? ""
+            return unit.hasPrefix("°") ? "\(Int(number.rounded()))°" : "\(Int(number.rounded())) \(unit)".trimmingCharacters(in: .whitespaces)
+        }
+        let words = state.replacingOccurrences(of: "_", with: " ")
+        return words.prefix(1).uppercased() + words.dropFirst()
+    }
+
+    /// What a hotspot shows on the picture under the device: an oven's
+    /// "Off", "342°", or "212° → 350°" while it heats; a fridge's setpoint;
+    /// a sensor's reading.
+    var hotspotReading: String? {
+        guard !["unavailable", "unknown"].contains(state) else { return nil }
+        if entityId.hasPrefix("sensor.") { return readableState }
+        guard entityId.hasPrefix("water_heater.") else { return nil }
+
+        let target = attributeDouble("temperature").flatMap { $0 > 0 ? Int($0.rounded()) : nil }
+        guard attributeStringArray("operation_list")?.contains("off") == true else {
+            return target.map { "\($0)°" }
+        }
+        guard isApplianceRunning else { return "Off" }
+        guard let current = attributeDouble("current_temperature").map({ Int($0.rounded()) }) else {
+            return target.map { "\($0)°" } ?? readableState
+        }
+        if let target, current < target - 5 { return "\(current)° → \(target)°" }
+        return "\(current)°"
+    }
+
+    /// An appliance's readings under its state: "Set to 350°", "Now 342°",
+    /// "Door closed". A fridge reports no current temperature, an oven
+    /// that's off a meaningless one, so those are left out.
+    var applianceDetails: [String] {
+        guard entityId.hasPrefix("water_heater.") else { return [] }
+        var details: [String] = []
+        if let target = attributeDouble("temperature"), target > 0 {
+            details.append("Set to \(Int(target.rounded()))°")
+        }
+        if isApplianceRunning, let current = attributeDouble("current_temperature") {
+            details.append("Now \(Int(current.rounded()))°")
+        }
+        if let door = attributeString("door_status") {
+            details.append("Door \(door.lowercased())")
+        }
+        return details
     }
 
     /// The friendly name without the room in front: "Main Bedroom Bedside
@@ -103,6 +178,38 @@ private struct PowerToggle: View {
     }
 }
 
+/// A device's state and readings, without a power button: a sensor's whole
+/// sheet, and the top of an appliance's.
+private struct ReadOnlyStatus: View {
+    let entity: HAEntityState
+    let symbol: String
+
+    private var isActive: Bool {
+        entity.entityId.hasPrefix("water_heater.") ? entity.isApplianceRunning : entity.state == "on"
+    }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            DeviceSymbol(name: symbol, size: 34)
+                .foregroundStyle(isActive ? Color.black : Color.secondary)
+                .frame(width: 88, height: 88)
+                .background(isActive ? AnyShapeStyle(Color.yellow) : AnyShapeStyle(.regularMaterial), in: Circle())
+                .shadow(color: isActive ? .yellow.opacity(0.5) : .clear, radius: 14)
+                .accessibilityHidden(true)
+
+            Text(entity.readableState)
+                .font(.headline)
+            ForEach(entity.applianceDetails, id: \.self) { detail in
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// A slider that only calls Home Assistant when the finger lifts, and
 /// follows the entity otherwise.
 private struct CommitSlider: View {
@@ -136,6 +243,88 @@ private struct CommitSlider: View {
                 }
             )
         }
+    }
+}
+
+// MARK: - Appliance
+
+/// An oven or fridge compartment, which Home Assistant models as a
+/// `water_heater`: the mode, which is how an oven turns on and off, and the
+/// temperature it's set to.
+private struct ApplianceControls: View {
+    let entity: HAEntityState
+    let symbol: String
+
+    @EnvironmentObject private var haClient: HAWebSocketClient
+
+    private var modes: [String] { entity.attributeStrings("operation_list") }
+    private var mode: String { entity.attributeString("operation_mode") ?? entity.state }
+
+    private var range: ClosedRange<Double>? {
+        guard let low = entity.attributeDouble("min_temp"), let high = entity.attributeDouble("max_temp"), low < high else { return nil }
+        return low...high
+    }
+
+    /// An oven that's off has no temperature to set: picking a mode starts it.
+    private var canSetTemperature: Bool { range != nil && (entity.isApplianceRunning || !modes.contains("off")) }
+
+    var body: some View {
+        ReadOnlyStatus(entity: entity, symbol: symbol)
+
+        if !modes.isEmpty {
+            LabeledContent("Mode") {
+                Picker("Mode", selection: Binding(
+                    get: { mode },
+                    set: { haClient.callService(domain: "water_heater", service: "set_operation_mode", entityId: entity.entityId,
+                                                data: ["operation_mode": .string($0)]) }
+                )) {
+                    ForEach(modes, id: \.self) { mode in
+                        Text(mode.prefix(1).uppercased() + mode.dropFirst()).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+            .font(.subheadline)
+            .disabled(!entity.isAvailable)
+        }
+
+        if canSetTemperature, let range {
+            CommitSlider(
+                label: "Set to",
+                symbol: "thermometer.medium",
+                value: min(max(entity.attributeDouble("temperature") ?? range.lowerBound, range.lowerBound), range.upperBound),
+                range: range,
+                // An oven's 170–550° in fives; a fridge's few degrees in ones.
+                step: range.upperBound - range.lowerBound > 50 ? 5 : 1,
+                format: { "\(Int($0.rounded()))°" }
+            ) { temperature in
+                haClient.callService(domain: "water_heater", service: "set_temperature", entityId: entity.entityId,
+                                     data: ["temperature": .number(temperature)])
+            }
+            .disabled(!entity.isAvailable)
+        }
+    }
+}
+
+/// A `select`, like an oven light's Off and High: one button per option.
+private struct OptionControls: View {
+    let entity: HAEntityState
+    let symbol: String
+
+    @EnvironmentObject private var haClient: HAWebSocketClient
+
+    var body: some View {
+        ReadOnlyStatus(entity: entity, symbol: symbol)
+
+        Picker("Option", selection: Binding(
+            get: { entity.state },
+            set: { haClient.callService(domain: "select", service: "select_option", entityId: entity.entityId,
+                                        data: ["option": .string($0)]) }
+        )) {
+            ForEach(entity.attributeStrings("options"), id: \.self) { Text($0).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .disabled(!entity.isAvailable)
     }
 }
 

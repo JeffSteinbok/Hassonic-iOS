@@ -12,6 +12,10 @@ import Foundation
 /// `x` and `y` are the button's centre as a fraction of the image's width and
 /// height, so they hold at any size the picture is drawn. One entity can have
 /// several hotspots (a lamp on each nightstand driven by one light).
+///
+/// Lights, fans, switches, speakers and covers toggle on a tap. Anything else
+/// opens its sheet instead: an oven has a mode and a temperature to pick, not
+/// one right answer to "on", and a door or leak sensor only has readings.
 struct DashboardRoomCardConfiguration: Decodable, Equatable {
     struct Hotspot: Decodable, Equatable, Identifiable {
         let entity: String
@@ -30,6 +34,12 @@ struct DashboardRoomCardConfiguration: Decodable, Equatable {
 
         var domain: String { String(entity.split(separator: ".").first ?? "") }
 
+        /// Whether a tap switches it; otherwise a tap opens its sheet, so a
+        /// stray tap on the picture can't start an oven.
+        var isToggleable: Bool { Self.toggleableDomains.contains(domain) }
+
+        static let toggleableDomains: Set<String> = ["light", "fan", "switch", "input_boolean", "media_player", "cover"]
+
         /// The domain's symbol: a bulb for a light, a fan for a fan, a
         /// speaker for a media player.
         var symbol: String {
@@ -40,6 +50,8 @@ struct DashboardRoomCardConfiguration: Decodable, Equatable {
             case "media_player": return "hifispeaker.fill"
             case "switch": return "power"
             case "cover": return "blinds.horizontal.closed"
+            case "water_heater": return "thermometer.medium"
+            case "binary_sensor", "sensor": return "sensor.fill"
             default: return "circle.fill"
             }
         }
