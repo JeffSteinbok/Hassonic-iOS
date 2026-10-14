@@ -150,6 +150,7 @@ final class MockHAClient: ObservableObject, HAClientProtocol {
     func coverSetPosition(_ entityId: String, position: Int) { serviceCallLog.append(("coverSetPosition:\(position)", entityId)) }
 
     func remoteSendCommand(_ entityId: String, command: String) { serviceCallLog.append(("remoteSendCommand:\(command)", entityId)) }
+    func remoteSendText(_ entityId: String, text: String) { serviceCallLog.append(("remoteSendText:\(text)", entityId)) }
     func runScript(_ entityId: String) { serviceCallLog.append(("runScript", entityId)) }
     func toggle(_ entityId: String) { serviceCallLog.append(("toggle", entityId)) }
     func climateSetTemperature(_ entityId: String, temperature: Double) { serviceCallLog.append(("climateSetTemperature:\(temperature)", entityId)) }

@@ -19,6 +19,7 @@ import json
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -219,10 +220,14 @@ def main():
                        env={**__import__("os").environ, **environment})
         time.sleep(6)
         path = OUT / f"{name}.png"
-        subprocess.run(["xcrun", "simctl", "io", device, "screenshot", str(path)], check=True, capture_output=True)
-        # Half size: plenty for a README, a fraction of the bytes.
-        with Image.open(path) as shot:
-            shot.convert("RGB").resize((shot.width // 2, shot.height // 2), Image.LANCZOS).save(path, optimize=True)
+        # The simulator service may not write into a protected folder like
+        # ~/Documents, so it captures to a temp file that's then moved in.
+        with tempfile.TemporaryDirectory() as scratch:
+            raw = Path(scratch) / "shot.png"
+            subprocess.run(["xcrun", "simctl", "io", device, "screenshot", str(raw)], check=True, capture_output=True)
+            # Half size: plenty for a README, a fraction of the bytes.
+            with Image.open(raw) as shot:
+                shot.convert("RGB").resize((shot.width // 2, shot.height // 2), Image.LANCZOS).save(path, optimize=True)
         print(f"captured {path.relative_to(REPO)}")
 
     subprocess.run(["xcrun", "simctl", "terminate", device, bundle], capture_output=True)

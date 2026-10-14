@@ -70,6 +70,8 @@ enum DashboardCardActionRouter {
                 let pause = !(lastSamsungPlaybackWasPause[remote] ?? false)
                 lastSamsungPlaybackWasPause[remote] = pause
                 client.remoteSendCommand(remote, command: pause ? "KEY_PAUSE" : "KEY_PLAY")
+            case .sendText(let remote, let text):
+                client.remoteSendText(remote, text: text)
             case .runScript(let script):
                 client.runScript(script)
             }

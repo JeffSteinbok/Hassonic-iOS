@@ -76,6 +76,9 @@ targets:
         # Only HTTPS and WSS, which are exempt. Without this every upload sits
         # at "Missing Compliance" and no tester can install it.
         ITSAppUsesNonExemptEncryption: false
+        # The Xfinity remote's voice key.
+        NSMicrophoneUsageDescription: "Hassonic listens when you tap the microphone on the Xfinity remote, to send what you say to your cable box."
+        NSSpeechRecognitionUsageDescription: "What you say to the Xfinity remote's microphone is turned into text, on your iPhone when it can be, and sent to your cable box."
         # Color only: the splash draws the mark with the name and spinner
         # under it, centered as a group, so a launch-screen mark would jump.
         UILaunchScreen:

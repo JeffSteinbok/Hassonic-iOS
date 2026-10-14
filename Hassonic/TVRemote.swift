@@ -181,6 +181,8 @@ enum TVRemoteAction: Equatable {
     /// Samsung with no media player: alternate KEY_PAUSE and KEY_PLAY.
     case samsungPlayPause(remote: String)
     case runScript(script: String)
+    /// What you'd say into the box's voice remote, as text ("watch ESPN").
+    case sendText(remote: String, text: String)
 }
 
 /// The `tv_remote` card.
@@ -219,6 +221,17 @@ struct DashboardTVRemoteConfiguration: Decodable, Equatable {
 
     func device(_ side: TVRemoteSide) -> Device? {
         side == .tv ? tv : box
+    }
+
+    /// Whether the box takes spoken commands: an Xfinity box does, through
+    /// its integration's `send_text`.
+    var boxTakesVoice: Bool { box?.kind == .xfinity }
+
+    /// A spoken command for the box, sent as the words themselves.
+    func voiceActions(_ text: String) -> [TVRemoteAction] {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard boxTakesVoice, let box, !text.isEmpty else { return [] }
+        return [.sendText(remote: box.remote, text: text)]
     }
 
     /// Whether the TV is certainly off, from its media player's state. Not
