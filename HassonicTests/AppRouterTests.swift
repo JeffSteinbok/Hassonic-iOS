@@ -80,6 +80,32 @@ final class AppRouterTests: XCTestCase {
         XCTAssertEqual(router.selectedTab, .dashboard("climate"))
     }
 
+    func testARoomLinkOpensTheRoomOnTheFirstTab() throws {
+        let router = AppRouter()
+        let home = DashboardPageConfiguration(id: "home", title: "Home", systemIcon: "house", sections: [])
+        let remote = DashboardPageConfiguration(id: "remote", title: "Remote", systemIcon: "tv", sections: [])
+        let kitchen = DashboardPageConfiguration(id: "kitchen", title: "Kitchen", systemIcon: "oven", sections: [], isRoom: true)
+        router.setDashboardPages([home, kitchen, remote])
+        router.navigate(to: .tab(.dashboard("remote")))
+
+        router.handle(url: try XCTUnwrap(URL(string: "hassonic://kitchen")))
+
+        XCTAssertEqual(router.selectedTab, .dashboard("home"))
+        XCTAssertEqual(router.roomPath, ["kitchen"])
+    }
+
+    func testARoomThatGoesAwayLeavesThePath() {
+        let router = AppRouter()
+        let home = DashboardPageConfiguration(id: "home", title: "Home", systemIcon: "house", sections: [])
+        let kitchen = DashboardPageConfiguration(id: "kitchen", title: "Kitchen", systemIcon: "oven", sections: [], isRoom: true)
+        router.setDashboardPages([home, kitchen])
+        router.openRoom("kitchen")
+
+        router.setDashboardPages([home])
+
+        XCTAssertEqual(router.roomPath, [])
+    }
+
     func testRemovingSelectedDashboardPageSelectsFirstRemainingPage() {
         let router = AppRouter()
         let home = DashboardPageConfiguration(id: "home", title: "Home", systemIcon: "house", sections: [])

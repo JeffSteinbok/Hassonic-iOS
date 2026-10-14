@@ -90,6 +90,9 @@ struct DashboardSectionConfiguration: Decodable, Equatable {
 struct DashboardEntityCardConfiguration: Decodable, Equatable {
     let entity: String
     let title: String?
+    /// An SF Symbol, or one of the app's own like `torchiere`, for a
+    /// `light` card's row instead of the bulb.
+    var icon: String? = nil
 }
 
 struct DashboardTitledCardConfiguration: Decodable, Equatable {
@@ -98,9 +101,8 @@ struct DashboardTitledCardConfiguration: Decodable, Equatable {
 
 /// Who to show on a `people` card.
 ///
-/// Both knobs are optional and default to what the CarPlay screen does:
-/// every `person.*` entity Home Assistant knows, minus whoever is signed in
-/// — you know where you are. Name `entities` to pin an explicit set instead.
+/// Both knobs are optional. By default: every `person.*` entity Home
+/// Assistant knows, minus whoever is signed in — you know where you are. Name `entities` to pin an explicit set instead.
 struct DashboardPeopleCardConfiguration: Decodable, Equatable {
     let title: String?
     /// Explicit person entity ids, in the order given. Omit for every

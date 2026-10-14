@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// The `room` card: status chips, the room's picture with a button on each
-/// device (tap toggles, long-press opens its controls), lights glowing on
-/// the floor where they're on, quick actions, and what's playing.
+/// device (tap toggles, long-press opens its controls; an appliance or sensor
+/// opens them on a tap, and shows its reading on the picture), lights glowing
+/// on the floor where they're on, quick actions, and what's playing.
 struct RoomPlanCardView: View {
     let card: DashboardRoomCardConfiguration
 
@@ -66,8 +67,9 @@ struct RoomPlanCardView: View {
                 GeometryReader { geometry in
                     ZStack(alignment: .topLeading) {
                         // The room dims a little, and each light that's on
-                        // throws a warm pool around itself.
-                        Color.black.opacity(0.3)
+                        // throws a warm pool around itself. A room with no
+                        // lights to show stays as photographed.
+                        Color.black.opacity(hasLights ? 0.3 : 0)
                         ForEach(litLights) { hotspot in
                             RadialGradient(
                                 colors: [Color(red: 1, green: 0.78, blue: 0.4).opacity(0.7),
@@ -100,6 +102,8 @@ struct RoomPlanCardView: View {
             .shadow(color: .black.opacity(0.35), radius: 16, y: 8)
     }
 
+    private var hasLights: Bool { card.hotspots.contains { $0.domain == "light" } }
+
     private var litLights: [DashboardRoomCardConfiguration.Hotspot] {
         card.hotspots.filter { $0.domain == "light" && haClient.entity($0.entity)?.state == "on" }
     }
@@ -116,13 +120,20 @@ private struct HotspotButton: View {
     let name: String
     let showControls: () -> Void
 
-    private var hasControls: Bool { entity?.hasControlsBeyondPower ?? false }
+    /// Appliances and sensors always have a sheet: their controls or readings.
+    private var hasControls: Bool { !hotspot.isToggleable || (entity?.hasControlsBeyondPower ?? false) }
 
     @State private var longPresses = 0
 
     private var isOn: Bool {
-        guard let state = entity?.state else { return false }
-        return ["on", "playing", "open"].contains(state)
+        guard let entity else { return false }
+        if hotspot.domain == "water_heater" { return entity.isApplianceRunning }
+        return ["on", "playing", "open"].contains(entity.state)
+    }
+
+    private func tap() {
+        guard isAvailable else { return }
+        if hotspot.isToggleable { toggle() } else { showControls() }
     }
 
     private var isAvailable: Bool {
@@ -140,9 +151,25 @@ private struct HotspotButton: View {
             .background(isOn ? AnyShapeStyle(Color.yellow) : AnyShapeStyle(.regularMaterial), in: Circle())
             .overlay(Circle().strokeBorder(.white, lineWidth: 2))
             .shadow(color: isOn ? .yellow.opacity(0.6) : .black.opacity(0.3), radius: isOn ? 12 : 3, y: isOn ? 0 : 1)
+            .overlay(alignment: .bottom) {
+                // Below the button without moving it off the device.
+                if let reading = entity?.hotspotReading {
+                    Text(reading)
+                        .font(.caption.weight(.semibold))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(isOn ? AnyShapeStyle(Color.yellow) : AnyShapeStyle(.regularMaterial), in: Capsule())
+                        .foregroundStyle(isOn ? Color.black : Color.primary)
+                        .offset(y: 22)
+                        .accessibilityHidden(true)
+                }
+            }
             .opacity(isAvailable ? 1 : 0.45)
             .contentShape(Circle())
-            .onTapGesture { if isAvailable { toggle() } }
+            .onTapGesture { tap() }
             .onLongPressGesture(minimumDuration: 0.4) {
                 guard hasControls else { return }
                 longPresses += 1
@@ -151,10 +178,10 @@ private struct HotspotButton: View {
             .sensoryFeedback(.impact(weight: .medium), trigger: longPresses)
             .accessibilityElement()
             .accessibilityAddTraits(.isButton)
-            .accessibilityAction { if isAvailable { toggle() } }
+            .accessibilityAction { tap() }
             .accessibilityAction(named: "Controls") { if hasControls { showControls() } }
             .accessibilityLabel(name)
-            .accessibilityValue(isOn ? "On" : "Off")
+            .accessibilityValue(hotspot.isToggleable ? (isOn ? "On" : "Off") : (entity?.readableState ?? ""))
             .sensoryFeedback(.selection, trigger: isOn)
     }
 }

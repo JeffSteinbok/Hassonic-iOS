@@ -15,8 +15,8 @@ final class RoomImageStore {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         guard let (data, response) = try? await URLSession.shared.data(for: request),
-              let http = response as? HTTPURLResponse,
-              (200..<300).contains(http.statusCode),
+              // A file URL (the screenshot demo's) has no status to check.
+              (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? url.isFileURL,
               let image = UIImage(data: data) else { return nil }
         images[path] = image
         return image
@@ -25,19 +25,13 @@ final class RoomImageStore {
 
 @MainActor
 extension DashboardRoomCardConfiguration {
-    /// "71°" or "Air excellent": a status sensor as a chip reads.
+    /// "71°", "Air excellent" or "Sink dry": a status entity as a chip reads.
     func statusText(_ status: Status, client: HAWebSocketClient) -> String? {
         guard let entity = client.entity(status.entity),
               !["unavailable", "unknown"].contains(entity.state) else { return nil }
-        let reading: String
-        if let number = Double(entity.state) {
-            let unit = entity.attributeString("unit_of_measurement") ?? ""
-            reading = unit.hasPrefix("°") ? "\(Int(number.rounded()))°" : "\(Int(number.rounded())) \(unit)".trimmingCharacters(in: .whitespaces)
-        } else {
-            reading = entity.state.replacingOccurrences(of: "_", with: " ")
-        }
-        guard let label = status.label else { return reading.prefix(1).uppercased() + reading.dropFirst() }
-        return "\(label) \(reading)"
+        let reading = entity.readableState
+        guard let label = status.label else { return reading }
+        return "\(label) \(reading.prefix(1).lowercased() + reading.dropFirst())"
     }
 }
 

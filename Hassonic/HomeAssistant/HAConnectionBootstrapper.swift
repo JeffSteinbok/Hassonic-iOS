@@ -1,10 +1,7 @@
 import Foundation
 
 /// Brings up a Home Assistant connection from nothing but the saved
-/// credentials. The app's connection screen and the CarPlay scene are
-/// independent entry points into the same process — either can be the first
-/// one on screen — so both start from here rather than each reimplementing
-/// "resolve internal vs. external, then connect".
+/// credentials: resolve the internal or external URL, then connect.
 enum HAConnectionBootstrapper {
     @MainActor
     static func connectUsingSavedCredentials(
@@ -24,6 +21,20 @@ enum HAConnectionBootstrapper {
         guard let url = URL(string: resolvedURLString) else { return }
         client.connect(baseURL: url, accessToken: accessToken)
     }
+
+    #if DEBUG && targetEnvironment(simulator)
+    /// Signs a simulator in without the OAuth flow, for screenshots and UI
+    /// checks: launch with HASSONIC_HA_URL and HASSONIC_HA_TOKEN (a long-lived
+    /// access token) in the environment, e.g. through simctl's SIMCTL_CHILD_
+    /// prefix. HASSONIC_OPEN_URL, also read at launch, opens a page.
+    /// Debug simulator builds only.
+    static func saveCredentialsFromEnvironment(_ environment: [String: String] = ProcessInfo.processInfo.environment) {
+        guard let url = environment["HASSONIC_HA_URL"], !url.isEmpty,
+              let token = environment["HASSONIC_HA_TOKEN"], !token.isEmpty else { return }
+        KeychainStore.saveURL(url)
+        KeychainStore.saveToken(token)
+    }
+    #endif
 
     static func isBusyOrConnected(_ state: HAConnectionState) -> Bool {
         switch state {

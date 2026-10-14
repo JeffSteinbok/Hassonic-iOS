@@ -194,6 +194,26 @@ final class TVRemoteTests: XCTestCase {
         XCTAssertEqual(remote.digitActions(1, on: .box), [])
     }
 
+    // MARK: The TV's power
+
+    func testTheTVIsOffOnlyWhenItsMediaPlayerSaysSo() throws {
+        let remote = try familyRoom()
+        XCTAssertTrue(remote.tvIsOff(mediaPlayerState: "off"))
+        XCTAssertTrue(remote.tvIsOff(mediaPlayerState: "standby"))
+        XCTAssertFalse(remote.tvIsOff(mediaPlayerState: "on"))
+        XCTAssertFalse(remote.tvIsOff(mediaPlayerState: "playing"))
+        // Can't tell, so the keys stay usable.
+        XCTAssertFalse(remote.tvIsOff(mediaPlayerState: "unavailable"))
+        XCTAssertFalse(remote.tvIsOff(mediaPlayerState: nil))
+    }
+
+    func testATVWithoutAMediaPlayerIsNeverOff() throws {
+        let remote = try card("""
+                    tv: { kind: samsung, remote: remote.tv }
+        """)
+        XCTAssertFalse(remote.tvIsOff(mediaPlayerState: "off"))
+    }
+
     // MARK: The TV's app
 
     func testRunningAppIsAListedNonInputSource() throws {

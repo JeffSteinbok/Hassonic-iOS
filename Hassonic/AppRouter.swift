@@ -34,7 +34,12 @@ final class AppRouter: ObservableObject {
     }
     @Published var musicShowPlayOn: Bool = false
     @Published var presentedSheet: AppSheet?
+    /// The rooms pushed on the first page, which is where their tiles are.
+    @Published var roomPath: [String] = []
     private var dashboardPageIDs: Set<String> = ["home", "security"]
+    private var roomPageIDs: Set<String> = []
+    /// The first tab, which carries the room tiles.
+    private var roomsHostPageID: String?
 
     /// Where the last tab picked is kept, so a relaunch or a reconnect lands
     /// back on it instead of the first page. Nil (tests) remembers nothing.
@@ -56,11 +61,22 @@ final class AppRouter: ObservableObject {
     }
 
     func setDashboardPages(_ pages: [DashboardPageConfiguration]) {
-        dashboardPageIDs = Set(pages.map(\.id))
+        let tabs = pages.filter { !$0.isRoom }
+        roomPageIDs = Set(pages.filter(\.isRoom).map(\.id))
+        roomsHostPageID = tabs.first?.id
+        roomPath.removeAll { !roomPageIDs.contains($0) }
+        dashboardPageIDs = Set(tabs.map(\.id))
         if case .dashboard(let selectedPageID) = selectedTab,
            !dashboardPageIDs.contains(selectedPageID) {
-            selectedTab = pages.first.map { .dashboard($0.id) } ?? .connection
+            selectedTab = tabs.first.map { .dashboard($0.id) } ?? .connection
         }
+    }
+
+    /// Opens a room: the first tab, with the room pushed on it.
+    func openRoom(_ roomID: String) {
+        guard roomPageIDs.contains(roomID), let roomsHostPageID else { return }
+        selectedTab = .dashboard(roomsHostPageID)
+        roomPath = [roomID]
     }
 
     /// The tab last picked, if it still exists; otherwise the first page.
@@ -117,6 +133,8 @@ final class AppRouter: ObservableObject {
             presentedSheet = .settings
         case ("about", _):
             presentedSheet = .about
+        case let (roomID, _) where roomPageIDs.contains(roomID):
+            openRoom(roomID)
         case let (pageID, _) where dashboardPageIDs.contains(pageID):
             navigate(to: .tab(.dashboard(pageID)))
         default:

@@ -110,7 +110,7 @@ must be an SF Symbols name.
 
 | Type | Required fields | Behavior |
 |---|---|---|
-| `light` | `entity: light.*` | On/off toggle with availability state |
+| `light` | `entity: light.*`; optional `icon` (an SF Symbol, or `torchiere`) | On/off toggle with availability state |
 | `cover` | `entity: cover.*` | Open, close, stop, current position, and position slider |
 | `alarm` | `entity: alarm_control_panel.*` | Status, supported arm modes, and confirmed disarm |
 | `llm_vision_timeline` | None | LLM Vision events, images, refresh, and event detail |
@@ -179,8 +179,7 @@ Both options are optional:
 | `excludeSignedInUser` | `true` | drop the person tied to the signed-in HA account |
 | `title` | none | a heading above the card |
 
-People with no coordinate still appear — the phone has room to say "Away"
-where CarPlay could only drop them. Addresses come from the companion app's
+People with no coordinate still appear, as "Away". Addresses come from the companion app's
 `sensor.<device>_geocoded_location`, so a person tracked by something without
 one shows their zone instead.
 

@@ -5,6 +5,8 @@ import SwiftUI
 struct LightToggleRow: View {
     let label: String
     let entity: HAEntityState?
+    /// Drawn instead of the bulb; it shows on and off by its color alone.
+    var icon: String? = nil
     let onToggle: (Bool) -> Void
 
     private var isOn: Bool { entity?.state == "on" }
@@ -12,9 +14,15 @@ struct LightToggleRow: View {
 
     var body: some View {
         HStack {
-            Image(systemName: isOn ? "lightbulb.fill" : "lightbulb")
-                .foregroundStyle(isOn ? .yellow : .secondary)
-                .frame(width: 28)
+            Group {
+                if let icon {
+                    DeviceSymbol(name: icon, size: 17)
+                } else {
+                    Image(systemName: isOn ? "lightbulb.fill" : "lightbulb")
+                }
+            }
+            .foregroundStyle(isOn ? .yellow : .secondary)
+            .frame(width: 28)
             Toggle(label, isOn: Binding(
                 get: { isOn },
                 set: { onToggle($0) }

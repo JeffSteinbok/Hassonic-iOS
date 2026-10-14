@@ -3,13 +3,14 @@ import SwiftUI
 
 /// A dashboard card showing where everyone is: one map with a pin per person
 /// (everyone at home shares the house's), and a row per person under it.
-/// Tapping a row brings that person to the middle of the map.
+/// Tapping a row opens that person's history; tapping their pin centres them.
 struct PeopleCardView: View {
     let card: DashboardPeopleCardConfiguration
 
     @EnvironmentObject private var haClient: HAWebSocketClient
 
     @State private var position: MapCameraPosition = .automatic
+    @State private var historyFor: PersonLocation?
 
     private var people: [PersonLocation] {
         PersonLocationDirectory.people(
@@ -47,14 +48,31 @@ struct PeopleCardView: View {
 
                 VStack(spacing: 10) {
                     ForEach(people) { person in
-                        Button { focus(on: person.isHome ? home : person.coordinate) } label: {
+                        Button { historyFor = person } label: {
                             PersonRow(person: person, home: home, accessToken: haClient.accessToken)
+                                .overlay(alignment: .trailing) {
+                                    Image(systemName: "chevron.right")
+                                        .font(.footnote.weight(.semibold))
+                                        .foregroundStyle(.tertiary)
+                                        .padding(.trailing, 14)
+                                        .accessibilityHidden(true)
+                                }
                         }
                         .buttonStyle(.plain)
+                        .accessibilityHint("Shows where \(person.givenName) has been")
                     }
                 }
                 .padding(.horizontal)
             }
+        }
+        #if DEBUG && targetEnvironment(simulator)
+        .task {
+            if let id = DemoMode.openHistoryFor { historyFor = people.first { $0.entityId == id } }
+        }
+        #endif
+        .sheet(item: $historyFor) { person in
+            PersonHistorySheet(person: person)
+                .presentationDetents([.large])
         }
     }
 
@@ -69,6 +87,7 @@ struct PeopleCardView: View {
             ForEach(out.filter(\.hasCoordinate)) { person in
                 Annotation(person.givenName, coordinate: person.coordinate!, anchor: .top) {
                     PersonPin(person: person, accessToken: haClient.accessToken)
+                        .onTapGesture { focus(on: person.coordinate) }
                 }
                 .annotationTitles(.hidden)
             }
@@ -358,7 +377,7 @@ struct PersonAvatar: View {
                 ZStack {
                     Color(uiColor: .secondarySystemBackground)
                     Color.accentColor.opacity(0.18)
-                    Text(PersonPinRenderer.initials(for: person.name))
+                    Text(PersonLocationDirectory.initials(for: person.name))
                         .font(.system(size: size * 0.36, weight: .semibold))
                         .foregroundStyle(Color.accentColor)
                 }

@@ -1,1 +1,1 @@
-../../../../SteinbokHome/DashboardConfiguration.swift
+../../../../Hassonic/DashboardConfiguration.swift

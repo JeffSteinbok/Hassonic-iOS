@@ -1,1 +1,1 @@
-../../../../SteinbokHome/AppConfiguration.swift
+../../../../Hassonic/AppConfiguration.swift

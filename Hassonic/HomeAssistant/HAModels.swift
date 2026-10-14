@@ -50,14 +50,18 @@ struct HAEntityState: Decodable, Identifiable {
     /// it sends. For a `person` that's the moment they entered the zone they
     /// are in now — attribute-only updates (a GPS nudge) don't move it.
     let lastChanged: String?
+    /// When HA last saw *anything* change, attributes included: a GPS nudge
+    /// moves this but not `lastChanged`.
+    let lastUpdated: String?
 
     /// Spelled out so `lastChanged` can default, leaving the 20-odd existing
     /// call sites that predate it untouched.
-    init(entityId: String, state: String, attributes: [String: JSONValue], lastChanged: String? = nil) {
+    init(entityId: String, state: String, attributes: [String: JSONValue], lastChanged: String? = nil, lastUpdated: String? = nil) {
         self.entityId = entityId
         self.state = state
         self.attributes = attributes
         self.lastChanged = lastChanged
+        self.lastUpdated = lastUpdated
     }
 
     var id: String { entityId }
