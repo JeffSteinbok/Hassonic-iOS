@@ -11,10 +11,8 @@ enum HAConnectionState: Equatable {
 
 @MainActor
 final class HAWebSocketClient: ObservableObject, HAClientProtocol {
-    /// The CarPlay scene and the SwiftUI window scene are siblings in the
-    /// same process, not parent and child, so there's no environment to pass
-    /// the client through — they share this one connection instead of each
-    /// opening its own socket.
+    /// The app's one connection, which the app hands its views through the
+    /// environment.
     static let shared = HAWebSocketClient()
 
     @Published private(set) var connectionState: HAConnectionState = .disconnected

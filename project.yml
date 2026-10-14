@@ -1,8 +1,7 @@
 name: Hassonic
 options:
   deploymentTarget:
-    # CarPlay's condensed image rows — the avatar grid the car screen is built
-    # around — are iOS 26 only, so there's no fallback layout to maintain.
+    # Built and tested on iOS 26 only, so there's no older layout to maintain.
     iOS: "26.0"
 # Bundle IDs, team and sign-in page: see Config/Base.xcconfig.
 configFiles:
@@ -46,11 +45,6 @@ targets:
         DEVELOPMENT_ASSET_PATHS: "\"Hassonic/Preview Content\""
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_ENTITLEMENTS: Hassonic/Hassonic.entitlements
-        # CarPlay needs an Apple-granted entitlement that no device
-        # provisioning profile can carry until Apple approves it, so the
-        # CarPlay build of the entitlements is scoped to the simulator,
-        # where entitlements aren't validated. See docs/carplay.md.
-        CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]: Hassonic/HassonicSimulator.entitlements
         APP_DISPLAY_NAME: $(APP_NAME)
         CONFIG_FILE_NAME: $(CONFIG_NAME).yaml
       configs:
@@ -72,8 +66,9 @@ targets:
       path: Hassonic/Info.plist
       properties:
         CFBundleDisplayName: "$(APP_DISPLAY_NAME)"
-        # CarPlay labels the app from CFBundleName, not CFBundleDisplayName,
-        # and XcodeGen would otherwise default it to $(PRODUCT_NAME).
+        # Some system UI labels the app from CFBundleName, not
+        # CFBundleDisplayName, and XcodeGen would otherwise default it to
+        # $(PRODUCT_NAME).
         CFBundleName: "$(APP_DISPLAY_NAME)"
         ConfigFileName: "$(CONFIG_FILE_NAME)"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
@@ -86,14 +81,7 @@ targets:
         UILaunchScreen:
           UIColorName: LaunchBackground
         UIApplicationSceneManifest:
-          # CarPlay runs as a second scene alongside the phone window, so the
-          # app has to declare support for multiple scenes.
-          UIApplicationSupportsMultipleScenes: true
-          UISceneConfigurations:
-            CPTemplateApplicationSceneSessionRoleApplication:
-              - UISceneClassName: CPTemplateApplicationScene
-                UISceneConfigurationName: CarPlay
-                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).CarPlaySceneDelegate
+          UIApplicationSupportsMultipleScenes: false
         BuildGitShortSHA: "unknown"
         BuildTimestamp: "unknown"
         BuildConfiguration: "unknown"

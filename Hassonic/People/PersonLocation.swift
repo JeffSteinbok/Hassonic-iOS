@@ -1,8 +1,8 @@
 import CoreLocation
 import Foundation
 
-/// A Home Assistant `person.*` entity reduced to what the CarPlay screen
-/// needs: who they are, the zone label HA reports as the entity state, and a
+/// A Home Assistant `person.*` entity reduced to what the People card needs:
+/// who they are, the zone label HA reports as the entity state, and a
 /// coordinate to drop a pin on.
 struct PersonLocation: Equatable, Identifiable {
     let entityId: String
@@ -43,47 +43,35 @@ struct PersonLocation: Equatable, Identifiable {
     var street: String? { addressLines.first }
 
     /// "Springfield IL 62702" — the town line only. The sensor also reports a
-    /// country, which truncates the useful part away and tells a driver
-    /// nothing about where they already are.
+    /// country, which would truncate the useful part away.
     var locality: String? {
         addressLines.dropFirst().first
     }
 
-    /// "40 Oak Ave, Springfield IL 62702" — street and town on one line, for the
-    /// expanded card, which pushes its third slot to the bottom of the panel
-    /// and would otherwise strand the town away from the street.
+    /// "40 Oak Ave, Springfield IL 62702" — street and town on one line.
     var streetAndLocality: String? {
         let parts = [street, locality].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }
 
-    /// "Arrived 2 hr ago", or nil if HA never told us when.
-    var arrivalDescription: String? {
-        zoneEnteredAt.map { PersonLocationDirectory.arrivalDescription(enteredAt: $0) }
-    }
 
     /// First word of the name, or the whole thing if it's a single word. A
     /// household shares a surname more often than not, so the given name is
-    /// what identifies someone in a narrow pane.
+    /// what identifies someone in a short label.
     var givenName: String {
         name.split(separator: " ").first.map(String.init) ?? name
     }
 }
 
-/// Builds the CarPlay people list out of a raw Home Assistant entity snapshot.
+/// Builds the people list out of a raw Home Assistant entity snapshot.
 enum PersonLocationDirectory {
-    /// How many people reach the car screen. Six fit without scrolling in
-    /// CarPlay's condensed avatar grid.
-    static let maximumDisplayedPeople = 6
-
     /// Every `person.*` entity, name-sorted, with a coordinate resolved from
     /// the person's own GPS attributes or — for people tracked by something
     /// without GPS, e.g. a router-based device tracker — from the HA zone
     /// their state names.
     ///
-    /// `excludingUserId` drops the person tied to the signed-in HA account —
-    /// you know where you are, and on a four-slot screen the seat is better
-    /// spent on someone else.
+    /// `excludingUserId` drops the person tied to the signed-in HA account:
+    /// you know where you are.
     static func people(
         from entities: [HAEntityState],
         baseURLString: String = "",
@@ -134,18 +122,6 @@ enum PersonLocationDirectory {
         return entityIds.compactMap { id in all.first { $0.entityId == id } }
     }
 
-    /// The subset CarPlay can actually pin, capped to the template's limit.
-    static func mappablePeople(
-        from entities: [HAEntityState],
-        baseURLString: String = "",
-        excludingUserId: String? = nil
-    ) -> [PersonLocation] {
-        Array(
-            people(from: entities, baseURLString: baseURLString, excludingUserId: excludingUserId)
-                .filter(\.hasCoordinate)
-                .prefix(maximumDisplayedPeople)
-        )
-    }
 
     /// The Home Assistant companion app publishes a reverse-geocoded address
     /// for each device as `sensor.<device>_geocoded_location`, so there's no
@@ -192,9 +168,8 @@ enum PersonLocationDirectory {
         }
     }
 
-    /// The sensor reports a full postal address across several lines. Keep
-    /// them separate so the CarPlay pane can spread them across its title,
-    /// subtitle and summary rather than truncating one long string.
+    /// The sensor reports a full postal address across several lines; they're
+    /// kept separate so the street and the town can be shown on their own.
     static func normalizedAddressLines(_ state: String) -> [String] {
         let lines = state
             .split(whereSeparator: \.isNewline)
@@ -224,23 +199,6 @@ enum PersonLocationDirectory {
         return plain.date(from: withoutFraction)
     }
 
-    /// Deliberately coarse and short. A driver wants "about two hours", not a
-    /// timestamp to the minute, and the pane has one line to say it in.
-    static func arrivalDescription(enteredAt: Date, now: Date = Date()) -> String {
-        let elapsed = max(0, now.timeIntervalSince(enteredAt))
-        switch elapsed {
-        case ..<120:
-            return "Arrived just now"
-        case ..<3600:
-            return "Arrived \(Int(elapsed / 60)) min ago"
-        case ..<86_400:
-            let hours = Int(elapsed / 3600)
-            return "Arrived \(hours) hr ago"
-        default:
-            let days = Int(elapsed / 86_400)
-            return days == 1 ? "Arrived yesterday" : "Arrived \(days) days ago"
-        }
-    }
 
     /// HA reports a person's state as `home`, `not_home`, or the friendly name
     /// of the zone they're in.
@@ -279,5 +237,17 @@ enum PersonLocationDirectory {
 
     private static func zoneKey(for value: String) -> String {
         value.lowercased().replacingOccurrences(of: "_", with: " ")
+    }
+}
+
+extension PersonLocationDirectory {
+    /// "JS" for "Jamie Sterling": the first letters of the first two words,
+    /// for someone with no picture. "?" when there are no letters at all.
+    static func initials(for name: String) -> String {
+        let letters = name
+            .split(whereSeparator: { $0 == " " || $0 == "-" || $0 == "_" })
+            .compactMap { $0.first(where: \.isLetter) }
+            .prefix(2)
+        return letters.isEmpty ? "?" : String(letters).uppercased()
     }
 }

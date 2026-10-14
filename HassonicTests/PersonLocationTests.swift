@@ -4,7 +4,7 @@ import XCTest
 @testable import Hassonic
 
 @MainActor
-final class CarPlayPeopleTests: XCTestCase {
+final class PersonLocationTests: XCTestCase {
 
     // MARK: - Helpers
 
@@ -145,31 +145,6 @@ final class CarPlayPeopleTests: XCTestCase {
         XCTAssertFalse(people[0].hasCoordinate)
     }
 
-    // MARK: - What CarPlay actually gets to pin
-
-    func testMappablePeopleExcludeThoseWithoutACoordinate() {
-        let entities = [
-            person("person.alex", name: "Alex", state: "home", latitude: 47.6, longitude: -122.3),
-            person("person.mel", name: "Mel", state: "not_home")
-        ]
-
-        XCTAssertEqual(PersonLocationDirectory.mappablePeople(from: entities).map(\.name), ["Alex"])
-    }
-
-    func testMappablePeopleAreCappedSoTheListNeverScrolls() {
-        let entities = (0..<20).map {
-            person("person.p\($0)", name: String(format: "Person %02d", $0), state: "home", latitude: 47.6, longitude: -122.3)
-        }
-
-        let mappable = PersonLocationDirectory.mappablePeople(from: entities)
-
-        XCTAssertEqual(PersonLocationDirectory.maximumDisplayedPeople, 6)
-        XCTAssertEqual(mappable.count, 6)
-        XCTAssertEqual(
-            mappable.map(\.name),
-            ["Person 00", "Person 01", "Person 02", "Person 03", "Person 04", "Person 05"]
-        )
-    }
 
     // MARK: - Profile pictures
 
@@ -203,60 +178,22 @@ final class CarPlayPeopleTests: XCTestCase {
         XCTAssertNil(people.first?.pictureURL)
     }
 
-    // MARK: - Map pins
+    // MARK: - Initials
 
     func testInitialsUseTheFirstTwoWords() {
-        XCTAssertEqual(PersonPinRenderer.initials(for: "Jamie Sterling"), "JS")
-        XCTAssertEqual(PersonPinRenderer.initials(for: "alex"), "A")
-        XCTAssertEqual(PersonPinRenderer.initials(for: "Mary Jane Watson"), "MJ")
+        XCTAssertEqual(PersonLocationDirectory.initials(for: "Jamie Sterling"), "JS")
+        XCTAssertEqual(PersonLocationDirectory.initials(for: "alex"), "A")
+        XCTAssertEqual(PersonLocationDirectory.initials(for: "Mary Jane Watson"), "MJ")
     }
 
     func testInitialsFallBackWhenThereAreNoLetters() {
-        XCTAssertEqual(PersonPinRenderer.initials(for: "123"), "?")
-        XCTAssertEqual(PersonPinRenderer.initials(for: ""), "?")
+        XCTAssertEqual(PersonLocationDirectory.initials(for: "123"), "?")
+        XCTAssertEqual(PersonLocationDirectory.initials(for: ""), "?")
     }
 
-    func testPinIsRenderedAtTheSizeAndScaleCarPlayAsksFor() {
-        let size = CGSize(width: 40, height: 40)
 
-        let pin = PersonPinRenderer.pin(avatar: nil, name: "Alex", size: size, scale: 2)
 
-        XCTAssertEqual(pin.size, size)
-        XCTAssertEqual(pin.scale, 2)
-    }
 
-    func testPinIsRenderedFromTheAvatarWhenThereIsOne() {
-        let avatar = UIGraphicsImageRenderer(size: CGSize(width: 100, height: 100)).image { context in
-            UIColor.red.setFill()
-            context.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
-        }
-
-        let pin = PersonPinRenderer.pin(avatar: avatar, name: "Alex", size: CGSize(width: 40, height: 40), scale: 1)
-
-        XCTAssertEqual(pin.size, CGSize(width: 40, height: 40))
-    }
-
-    /// A wide avatar must fill the circle and overflow sideways rather than
-    /// squash, so the crop stays centred on the face.
-    func testWideAvatarsFillTheCircleWithoutDistortion() {
-        let bounds = CGRect(x: 0, y: 0, width: 40, height: 40)
-
-        let rect = PersonPinRenderer.aspectFillRect(for: CGSize(width: 200, height: 100), in: bounds)
-
-        XCTAssertEqual(rect.height, 40, accuracy: 0.001)
-        XCTAssertEqual(rect.width, 80, accuracy: 0.001)
-        XCTAssertEqual(rect.midX, bounds.midX, accuracy: 0.001)
-        XCTAssertEqual(rect.midY, bounds.midY, accuracy: 0.001)
-    }
-
-    func testTallAvatarsFillTheCircleWithoutDistortion() {
-        let bounds = CGRect(x: 0, y: 0, width: 40, height: 40)
-
-        let rect = PersonPinRenderer.aspectFillRect(for: CGSize(width: 100, height: 200), in: bounds)
-
-        XCTAssertEqual(rect.width, 40, accuracy: 0.001)
-        XCTAssertEqual(rect.height, 80, accuracy: 0.001)
-    }
 
     // MARK: - Excluding whoever is signed in
 
@@ -293,32 +230,10 @@ final class CarPlayPeopleTests: XCTestCase {
         )
     }
 
-    /// Dropping yourself frees a slot, so one more of the household moves
-    /// into view instead of being cut off by the cap.
-    func testExcludingYourselfFreesASlotInTheCappedList() {
-        var entities = (0..<6).map {
-            person("person.p\($0)", name: "Person \($0)", state: "home", latitude: 47.6, longitude: -122.3)
-        }
-        entities.insert(
-            person("person.me", name: "AAA Me", state: "home", latitude: 47.6, longitude: -122.3, userId: "user-me"),
-            at: 0
-        )
 
-        let withMe = PersonLocationDirectory.mappablePeople(from: entities)
-        let withoutMe = PersonLocationDirectory.mappablePeople(from: entities, excludingUserId: "user-me")
+    // MARK: - How a person reads
 
-        // With me in the list I take a slot and Person 5 is cut off.
-        XCTAssertEqual(withMe.map(\.name).first, "AAA Me")
-        XCTAssertFalse(withMe.map(\.name).contains("Person 5"))
-        XCTAssertEqual(
-            withoutMe.map(\.name),
-            ["Person 0", "Person 1", "Person 2", "Person 3", "Person 4", "Person 5"]
-        )
-    }
-
-    // MARK: - How a person reads in the map pane
-
-    func testGivenNameIdentifiesSomeoneInTheNarrowPane() {
+    func testGivenNameIsTheFirstWord() {
         let people = PersonLocationDirectory.people(from: [
             person("person.jamie", name: "Jamie Sterling", state: "home", latitude: 1, longitude: 1),
             person("person.alex", name: "Alex", state: "home", latitude: 2, longitude: 2)
@@ -374,7 +289,7 @@ final class CarPlayPeopleTests: XCTestCase {
         XCTAssertNil(people.first?.streetAndLocality)
     }
 
-    // MARK: - Map-pane addresses
+    // MARK: - Addresses
 
     private func geocodedSensor(_ objectId: String, address: String) -> HAEntityState {
         HAEntityState(entityId: "sensor.\(objectId)_geocoded_location", state: address, attributes: [:])
@@ -445,31 +360,7 @@ final class CarPlayPeopleTests: XCTestCase {
 
     // MARK: - How long they've been there
 
-    func testArrivalIsDescribedCoarsely() {
-        let now = Date(timeIntervalSince1970: 1_000_000)
-        func described(secondsAgo: TimeInterval) -> String {
-            PersonLocationDirectory.arrivalDescription(
-                enteredAt: now.addingTimeInterval(-secondsAgo),
-                now: now
-            )
-        }
 
-        XCTAssertEqual(described(secondsAgo: 5), "Arrived just now")
-        XCTAssertEqual(described(secondsAgo: 119), "Arrived just now")
-        XCTAssertEqual(described(secondsAgo: 600), "Arrived 10 min ago")
-        XCTAssertEqual(described(secondsAgo: 7_200), "Arrived 2 hr ago")
-        XCTAssertEqual(described(secondsAgo: 90_000), "Arrived yesterday")
-        XCTAssertEqual(described(secondsAgo: 3 * 86_400), "Arrived 3 days ago")
-    }
-
-    /// A clock skew between HA and the phone must not read as the future.
-    func testFutureTimestampsReadAsJustNow() {
-        let now = Date(timeIntervalSince1970: 1_000_000)
-        XCTAssertEqual(
-            PersonLocationDirectory.arrivalDescription(enteredAt: now.addingTimeInterval(60), now: now),
-            "Arrived just now"
-        )
-    }
 
     func testHomeAssistantTimestampsParse() {
         // Six fractional digits, as HA actually sends.
@@ -497,42 +388,6 @@ final class CarPlayPeopleTests: XCTestCase {
         XCTAssertEqual(
             PersonLocationDirectory.people(from: [entity]).first?.zoneEnteredAt,
             PersonLocationDirectory.parseTimestamp("2026-09-11T21:30:00.123456+00:00")
-        )
-    }
-
-    func testNoArrivalDescriptionWhenHomeAssistantDidNotSay() {
-        let people = PersonLocationDirectory.people(from: [
-            person("person.avery", name: "Avery", state: "home", latitude: 1, longitude: 1)
-        ])
-
-        XCTAssertNil(people.first?.zoneEnteredAt)
-        XCTAssertNil(people.first?.arrivalDescription)
-    }
-
-    // MARK: - Empty-state messaging
-
-    func testStatusMessageExplainsDisconnectedState() {
-        XCTAssertEqual(
-            CarPlaySceneDelegate.statusMessage(for: .disconnected, hasPeopleEntities: false),
-            "Open \(AppIdentity.name) on your iPhone to connect."
-        )
-    }
-
-    func testStatusMessageSurfacesConnectionFailures() {
-        XCTAssertEqual(
-            CarPlaySceneDelegate.statusMessage(for: .failed("Network unreachable"), hasPeopleEntities: false),
-            "Network unreachable"
-        )
-    }
-
-    func testStatusMessageDistinguishesNoPeopleFromNoLocations() {
-        XCTAssertEqual(
-            CarPlaySceneDelegate.statusMessage(for: .connected, hasPeopleEntities: false),
-            "No people are configured in Home Assistant."
-        )
-        XCTAssertEqual(
-            CarPlaySceneDelegate.statusMessage(for: .connected, hasPeopleEntities: true),
-            "No one has a location to show yet."
         )
     }
 }

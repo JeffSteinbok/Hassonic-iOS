@@ -179,8 +179,7 @@ Both options are optional:
 | `excludeSignedInUser` | `true` | drop the person tied to the signed-in HA account |
 | `title` | none | a heading above the card |
 
-People with no coordinate still appear — the phone has room to say "Away"
-where CarPlay could only drop them. Addresses come from the companion app's
+People with no coordinate still appear, as "Away". Addresses come from the companion app's
 `sensor.<device>_geocoded_location`, so a person tracked by something without
 one shows their zone instead.
 

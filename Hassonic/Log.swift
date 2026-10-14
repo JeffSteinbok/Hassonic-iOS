@@ -10,7 +10,6 @@ enum Log {
     static let music = Logger(subsystem: subsystem, category: "Music")
     static let liveActivity = Logger(subsystem: subsystem, category: "LiveActivity")
     static let push = Logger(subsystem: subsystem, category: "Push")
-    static let carPlay = Logger(subsystem: subsystem, category: "CarPlay")
 }
 
 extension Logger {

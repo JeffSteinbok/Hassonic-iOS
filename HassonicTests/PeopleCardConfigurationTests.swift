@@ -104,12 +104,9 @@ final class PeopleCardConfigurationTests: XCTestCase {
         XCTAssertEqual(people.map(\.name), ["Mel"])
     }
 
-    /// The phone card has no head unit dictating row heights, so unlike
-    /// CarPlay it isn't capped.
-    func testThePhoneCardIsNotCappedAtTheCarPlayLimit() {
+    func testTheCardIsNotCapped() {
         let many = (0..<10).map { person("person.p\($0)", name: "Person \($0)") }
 
         XCTAssertEqual(PersonLocationDirectory.people(from: many, matching: nil).count, 10)
-        XCTAssertEqual(PersonLocationDirectory.mappablePeople(from: many).count, 6)
     }
 }

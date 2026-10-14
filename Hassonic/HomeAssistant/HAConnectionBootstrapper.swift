@@ -1,10 +1,7 @@
 import Foundation
 
 /// Brings up a Home Assistant connection from nothing but the saved
-/// credentials. The app's connection screen and the CarPlay scene are
-/// independent entry points into the same process — either can be the first
-/// one on screen — so both start from here rather than each reimplementing
-/// "resolve internal vs. external, then connect".
+/// credentials: resolve the internal or external URL, then connect.
 enum HAConnectionBootstrapper {
     @MainActor
     static func connectUsingSavedCredentials(

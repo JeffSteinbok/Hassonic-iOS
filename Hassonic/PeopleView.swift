@@ -372,7 +372,7 @@ struct PersonAvatar: View {
                 ZStack {
                     Color(uiColor: .secondarySystemBackground)
                     Color.accentColor.opacity(0.18)
-                    Text(PersonPinRenderer.initials(for: person.name))
+                    Text(PersonLocationDirectory.initials(for: person.name))
                         .font(.system(size: size * 0.36, weight: .semibold))
                         .foregroundStyle(Color.accentColor)
                 }
