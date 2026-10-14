@@ -205,8 +205,8 @@ struct DashboardTVRemoteConfiguration: Decodable, Equatable {
         /// power command, e.g. one that blasts IR to turn on a TV whose
         /// network remote is asleep while it's off.
         var power: String?
-        /// Saved spoken commands for a box that takes them, offered by
-        /// holding its voice key: `{ name: ESPN, say: "watch ESPN" }`.
+        /// Saved spoken commands for a box that takes them, offered by its
+        /// favorites key: `{ name: ESPN, say: "watch ESPN" }`.
         var favorites: [VoiceFavorite]?
 
         var displayName: String { name ?? kind.displayName }
@@ -241,7 +241,7 @@ struct DashboardTVRemoteConfiguration: Decodable, Equatable {
     /// its integration's `send_text`.
     var boxTakesVoice: Bool { box?.kind == .xfinity }
 
-    /// The saved commands to offer on the voice key; none for a box that
+    /// The saved commands the favorites key offers; none for a box that
     /// can't take them.
     var voiceFavorites: [VoiceFavorite] {
         boxTakesVoice ? (box?.favorites ?? []).filter { !$0.name.isEmpty && !$0.say.isEmpty } : []

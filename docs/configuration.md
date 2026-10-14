@@ -129,7 +129,7 @@ must be an SF Symbols name.
   box:
     kind: xfinity
     remote: remote.xfinity
-    favorites:                       # hold the voice key for these
+    favorites:                       # the ★ key's menu
       - { name: ESPN, say: "watch ESPN", icon: sportscourt.fill }
       - { name: Kids movies, say: "show me kids movies" }
 ```
@@ -141,7 +141,7 @@ must be an SF Symbols name.
 | `mediaPlayer` | Optional. For Samsung, play/pause toggles through it; without one the key alternates pause and play. |
 | `name` | Optional; the panel's label. Defaults to "Samsung TV" or "Xfinity". |
 | `power` | Optional `script.*` the power key runs instead of sending the device's own power command. For a Samsung, whose network remote can turn it off but not on, point it at a script that sends the TV's IR power code through an IR blaster such as a Broadlink. |
-| `favorites` | Optional, `xfinity` only. Saved voice commands, offered by holding the box panel's voice key: each a `name` for the menu, what to `say`, and an optional SF Symbol `icon`. |
+| `favorites` | Optional, `xfinity` only. Saved voice commands, offered by the ★ key beside the box panel's voice key: each a `name` for the menu, what to `say`, and an optional SF Symbol `icon`. |
 
 Each device gets its own panel and its keys always go to that device: the `tv`
 panel is drawn like the Samsung remote, the `box` panel like the X1. Either can
@@ -151,7 +151,7 @@ you tap them, with Last (previous channel) and Enter.
 An `xfinity` box panel has a voice key. Tap it and say what you'd say into the
 box's own voice remote ("watch ESPN", "show me comedies"); the words go to the
 box through the integration's `xfinity_remote.send_text` once you stop talking.
-Hold it for the saved `favorites`.
+With `favorites`, a ★ key beside it opens a menu of them.
 
 Each card type is written for one kind of entity or integration: `light`, `cover`,
 `alarm` and `people` work with any entity of their domain, while

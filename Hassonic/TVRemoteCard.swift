@@ -309,7 +309,7 @@ private struct BoxPanel: View {
         let isListening: Bool
         /// "Listening…", the words so far, or the command just sent.
         let caption: String?
-        /// Saved commands, offered by holding the key.
+        /// Saved commands, offered by the favorites key.
         let favorites: [DashboardTVRemoteConfiguration.VoiceFavorite]
         let toggle: () -> Void
         let send: (String) -> Void
@@ -337,7 +337,10 @@ private struct BoxPanel: View {
                 }
                 Spacer(minLength: 0)
                 if let voice {
-                    MicKey(isListening: voice.isListening, favorites: voice.favorites, action: voice.toggle, send: voice.send)
+                    if !voice.favorites.isEmpty {
+                        FavoritesKey(favorites: voice.favorites, send: voice.send)
+                    }
+                    MicKey(isListening: voice.isListening, action: voice.toggle)
                 }
             }
             .animation(.easeInOut(duration: 0.2), value: voice?.caption)
@@ -400,77 +403,67 @@ private struct BoxPanel: View {
 }
 
 /// The voice key: tap and say what you'd say into the box's own voice
-/// remote. It pulses red while listening; tap again to send early. Hold it
-/// for the saved commands, when there are any.
+/// remote. It pulses red while listening; tap again to send early.
 private struct MicKey: View {
     let isListening: Bool
-    let favorites: [DashboardTVRemoteConfiguration.VoiceFavorite]
     let action: () -> Void
-    let send: (String) -> Void
 
     @State private var pulse = false
 
     var body: some View {
-        Group {
-            if favorites.isEmpty {
-                Button(action: action) { face }
-                    .buttonStyle(PressScaleButtonStyle())
-            } else {
-                Menu {
-                    ForEach(favorites) { favorite in
-                        Button { send(favorite.say) } label: {
-                            if let icon = favorite.icon {
-                                Label(favorite.name, systemImage: icon)
-                            } else {
-                                Text(favorite.name)
-                            }
-                        }
-                    }
-                } label: {
-                    face
-                } primaryAction: {
-                    action()
+        Button(action: action) {
+            Image(systemName: isListening ? "waveform" : "mic.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(isListening ? Color.white : RemoteColors.label)
+                .symbolEffect(.variableColor.iterative, isActive: isListening)
+                .frame(width: 44, height: 44)
+                .background(isListening ? RemoteColors.power : RemoteColors.boxKey, in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(RemoteColors.power.opacity(isListening ? 0.6 : 0), lineWidth: 3)
+                        .scaleEffect(pulse ? 1.35 : 1)
+                        .opacity(pulse ? 0 : 1)
                 }
-                .menuStyle(.button)
-                .buttonStyle(PressScaleButtonStyle())
-            }
         }
-        .modifier(MicAccessibility(isListening: isListening, hasFavorites: !favorites.isEmpty))
-        .onChange(of: isListening) { _, listening in animatePulse(listening) }
-    }
-
-    private func animatePulse(_ listening: Bool) {
-        pulse = false
-        guard listening else { return }
-        withAnimation(.easeOut(duration: 1).repeatForever(autoreverses: false)) { pulse = true }
-    }
-
-    private var face: some View {
-        Image(systemName: isListening ? "waveform" : "mic.fill")
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(isListening ? Color.white : RemoteColors.label)
-            .symbolEffect(.variableColor.iterative, isActive: isListening)
-            .frame(width: 44, height: 44)
-            .background(isListening ? RemoteColors.power : RemoteColors.boxKey, in: Circle())
-            .overlay {
-                Circle()
-                    .stroke(RemoteColors.power.opacity(isListening ? 0.6 : 0), lineWidth: 3)
-                    .scaleEffect(pulse ? 1.35 : 1)
-                    .opacity(pulse ? 0 : 1)
-            }
+        .buttonStyle(PressScaleButtonStyle())
+        .onChange(of: isListening) { _, listening in
+            pulse = false
+            guard listening else { return }
+            withAnimation(.easeOut(duration: 1).repeatForever(autoreverses: false)) { pulse = true }
+        }
+        .accessibilityLabel(isListening ? "Stop listening" : "Voice command")
+        .accessibilityHint(isListening ? "Sends what you've said" : "Say what you'd say into the voice remote, like watch ESPN")
     }
 }
 
-private struct MicAccessibility: ViewModifier {
-    let isListening: Bool
-    let hasFavorites: Bool
+/// The favorites key: a menu of saved voice commands, each sent as if
+/// spoken.
+private struct FavoritesKey: View {
+    let favorites: [DashboardTVRemoteConfiguration.VoiceFavorite]
+    let send: (String) -> Void
 
-    func body(content: Content) -> some View {
-        content
-            .accessibilityLabel(isListening ? "Stop listening" : "Voice command")
-            .accessibilityHint(isListening ? "Sends what you've said"
-                               : hasFavorites ? "Say what you'd say into the voice remote, or hold for saved commands"
-                               : "Say what you'd say into the voice remote, like watch ESPN")
+    var body: some View {
+        Menu {
+            ForEach(favorites) { favorite in
+                Button { send(favorite.say) } label: {
+                    if let icon = favorite.icon {
+                        Label(favorite.name, systemImage: icon)
+                    } else {
+                        Text(favorite.name)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "star.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.yellow)
+                .frame(width: 44, height: 44)
+                .background(RemoteColors.boxKey, in: Circle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(PressScaleButtonStyle())
+        .accessibilityLabel("Favorites")
+        .accessibilityHint("Saved voice commands")
     }
 }
 

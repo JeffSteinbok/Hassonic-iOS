@@ -29,7 +29,12 @@ pages:
           - type: tv_remote
             title: Living Room
             tv: { kind: samsung, remote: remote.living_room_tv, mediaPlayer: media_player.living_room_tv }
-            box: { kind: xfinity, remote: remote.cable_box }
+            box:
+              kind: xfinity
+              remote: remote.cable_box
+              favorites:
+                - { name: The game, say: watch the game, icon: sportscourt.fill }
+                - { name: Movies, say: show me movies, icon: film.fill }
 
   - id: security
     title: Security
