@@ -39,7 +39,9 @@ struct DashboardPageView: View {
                     DashboardSectionView(section: section)
                 }
             }
-            .padding(.vertical)
+            // Little above, so a tall card like the remote clears the tab bar.
+            .padding(.top, 4)
+            .padding(.bottom)
         }
         .reloadsConfigurationOnPull()
         .navigationTitle(page.title)
