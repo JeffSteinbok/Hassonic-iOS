@@ -1,8 +1,6 @@
 import Foundation
 
 struct LLMVisionEvent: Decodable, Identifiable, Equatable {
-    private static let dateFormatter = ISO8601DateFormatter()
-
     let uid: String
     let title: String?
     let description: String?
@@ -16,8 +14,7 @@ struct LLMVisionEvent: Decodable, Identifiable, Equatable {
     var id: String { uid }
 
     var startDate: Date? {
-        guard let start else { return nil }
-        return Self.dateFormatter.date(from: start)
+        start.flatMap(HATimestamp.parse)
     }
 }
 
@@ -30,11 +27,4 @@ enum LLMVisionError: Error, Equatable {
     case authenticationFailed
     case networkError(String)
     case decodingError
-
-    var isRetryable: Bool {
-        switch self {
-        case .networkError: return true
-        case .integrationUnavailable, .authenticationFailed, .decodingError: return false
-        }
-    }
 }

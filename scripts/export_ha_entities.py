@@ -1,13 +1,23 @@
 #!/usr/bin/env python3
+"""Export a sanitized inventory of your Home Assistant's entities.
+
+Writes docs/home-assistant-entities.json (gitignored): every entity's ID,
+name and state, with private domains and attributes left out. Handy when
+writing a config, or as context for a coding assistant.
+
+  scripts/export_ha_entities.py                    # HA_URL/HA_TOKEN from .ha.env
+  scripts/export_ha_entities.py --input states.json
+"""
 
 import argparse
 import json
-import os
 import re
 import urllib.request
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+
+from ha_env import load_env, require
 
 
 PRIVATE_DOMAINS = {
@@ -36,13 +46,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Export a sanitized Home Assistant entity inventory."
     )
-    source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--input", type=Path, help="Existing HA states JSON file.")
-    source.add_argument("--base-url", help="Home Assistant base URL.")
     parser.add_argument(
-        "--token-env",
-        default="HA_ACCESS_TOKEN",
-        help="Environment variable containing the HA access token.",
+        "--input", type=Path,
+        help="An HA states JSON file, instead of asking Home Assistant (HA_URL and HA_TOKEN in .ha.env).",
     )
     parser.add_argument(
         "--output",
@@ -57,12 +63,10 @@ def load_states(args: argparse.Namespace) -> list[dict]:
         with args.input.open(encoding="utf-8") as handle:
             return json.load(handle)
 
-    token = os.environ.get(args.token_env)
-    if not token:
-        raise SystemExit(f"{args.token_env} is not set")
-
+    env = load_env()
+    token = require(env, "HA_TOKEN")
     request = urllib.request.Request(
-        f"{args.base_url.rstrip('/')}/api/states",
+        f"{require(env, 'HA_URL').rstrip('/')}/api/states",
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
     )
     with urllib.request.urlopen(request, timeout=30) as response:

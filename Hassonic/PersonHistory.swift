@@ -43,7 +43,7 @@ struct PersonHistory: Equatable {
         let records = states
             .compactMap { state -> (date: Date, state: HAEntityState)? in
                 guard let stamp = state.lastUpdated ?? state.lastChanged,
-                      let date = PersonLocationDirectory.parseTimestamp(stamp) else { return nil }
+                      let date = HATimestamp.parse(stamp) else { return nil }
                 return (date, state)
             }
             .sorted { $0.date < $1.date }
@@ -142,7 +142,7 @@ enum PersonHistoryLoader {
         #if DEBUG && targetEnvironment(simulator)
         if let demo = DemoMode.history(for: entityId) {
             return PersonHistory.build(from: demo.filter {
-                ($0.lastUpdated ?? $0.lastChanged).flatMap(PersonLocationDirectory.parseTimestamp).map { $0 < end } ?? false
+                ($0.lastUpdated ?? $0.lastChanged).flatMap(HATimestamp.parse).map { $0 < end } ?? false
             }, start: start, end: end, now: now)
         }
         #endif

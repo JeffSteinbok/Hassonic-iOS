@@ -7,8 +7,6 @@ enum Palette {
     static let heat = Color(hex: "#C2410C")
     /// Cooling.
     static let cool = Color(hex: "#1D6FD1")
-    /// Neutral fill for a selected control with no hue of its own.
-    static let neutral = Color(hex: "#5B6371")
     /// Dark ink for text on a light icon theme.
     static let ink = Color(hex: "#1B1F28")
 }

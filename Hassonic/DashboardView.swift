@@ -145,7 +145,7 @@ private struct DashboardCardView: View {
 
         case .cover(let card):
             let entity = haClient.entity(card.entity)
-            AwningControlRow(
+            CoverControlRow(
                 label: card.title ?? entity?.friendlyName ?? card.entity,
                 entity: entity,
                 onOpen: {
@@ -199,15 +199,19 @@ private struct DashboardCardView: View {
 
         case .thermostat(let card):
             let entity = haClient.entity(card.entity)
+            let state = ThermostatState(entity)
             ThermostatCardView(
                 title: card.title ?? entity?.friendlyName ?? card.entity,
-                state: ThermostatState(entity),
+                state: state,
                 outside: card.outside.flatMap { DashboardCardActionRouter.outsideTemperature(haClient.entity($0)) },
                 compact: card.compact,
                 actions: ThermostatActions(
                     setTemperature: { DashboardCardActionRouter.setThermostat($0, entityID: card.entity, client: haClient) },
                     setRange: { DashboardCardActionRouter.setThermostatRange(low: $0, high: $1, entityID: card.entity, client: haClient) },
-                    setMode: { DashboardCardActionRouter.setThermostatMode($0, entityID: card.entity, client: haClient) }
+                    setMode: {
+                        DashboardCardActionRouter.setThermostatMode($0, autoModeName: state?.autoModeName ?? ThermostatState.Mode.auto.rawValue,
+                                                                    entityID: card.entity, client: haClient)
+                    }
                 )
             )
             .dashboardCardSurface()

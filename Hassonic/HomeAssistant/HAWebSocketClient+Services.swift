@@ -18,7 +18,11 @@ extension HAWebSocketClient {
         send(HAPlayMediaMessage(id: nextId(), target: .init(entityId: entityId), serviceData: .init(mediaContentId: contentId, mediaContentType: contentType)))
     }
 
+    /// Answered by the socket's `result`, or failed if the socket goes first.
     func browseMedia(entityId: String, mediaContentType: String? = nil, mediaContentId: String? = nil) async -> HABrowseMediaResult {
+        guard connectionState == .connected else {
+            return HABrowseMediaResult(success: false, result: nil, error: HAResultError(code: nil, message: "No connection to Home Assistant"))
+        }
         let id = nextId()
         return await withCheckedContinuation { continuation in
             browseMediaRequests[id] = continuation

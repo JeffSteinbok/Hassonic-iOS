@@ -24,6 +24,20 @@ final class HAOAuthClient: NSObject, ObservableObject, ASWebAuthenticationPresen
         let refreshToken: String?
     }
 
+    /// How a silent refresh went. Only `rejected` means signing in again: a
+    /// dropped connection or a restarting server is worth retrying.
+    enum Refresh: Equatable {
+        case refreshed(accessToken: String)
+        case rejected
+        case unreachable
+    }
+
+    private enum TokenOutcome {
+        case tokens(RawTokenResponse)
+        case rejected
+        case unreachable
+    }
+
     private struct RawTokenResponse: Decodable {
         let access_token: String
         let refresh_token: String?
@@ -47,7 +61,8 @@ final class HAOAuthClient: NSObject, ObservableObject, ASWebAuthenticationPresen
             session.presentationContextProvider = self
             session.prefersEphemeralWebBrowserSession = false
             authSession = session
-            session.start()
+            // A session that won't start never calls back.
+            if !session.start() { continuation.resume(returning: nil) }
         }
         authSession = nil
 
@@ -58,16 +73,25 @@ final class HAOAuthClient: NSObject, ObservableObject, ASWebAuthenticationPresen
         return await exchangeCode(baseURL: baseURL, code: code)
     }
 
-    /// Attempts a silent token refresh.  Returns a new access token or `nil`
-    /// if the refresh token is expired / invalid.
-    func refresh(baseURL: URL, refreshToken: String) async -> String? {
-        var request = tokenRequest(baseURL: baseURL)
+    /// A silent refresh with the refresh token saved in the Keychain.
+    func refreshUsingSavedToken(baseURL: URL) async -> Refresh {
+        guard let refreshToken = KeychainStore.loadRefreshToken() else { return .rejected }
+        return await refresh(baseURL: baseURL, refreshToken: refreshToken)
+    }
+
+    /// Attempts a silent token refresh.
+    func refresh(baseURL: URL, refreshToken: String) async -> Refresh {
+        guard var request = tokenRequest(baseURL: baseURL) else { return .rejected }
         request.httpBody = formBody([
             "grant_type": "refresh_token",
             "client_id": Self.clientId,
             "refresh_token": refreshToken,
         ])
-        return await performTokenRequest(request)?.access_token
+        switch await performTokenRequest(request) {
+        case .tokens(let raw): return .refreshed(accessToken: raw.access_token)
+        case .rejected: return .rejected
+        case .unreachable: return .unreachable
+        }
     }
 
     // MARK: - Private helpers
@@ -84,41 +108,55 @@ final class HAOAuthClient: NSObject, ObservableObject, ASWebAuthenticationPresen
     }
 
     private func exchangeCode(baseURL: URL, code: String) async -> TokenResponse? {
-        var request = tokenRequest(baseURL: baseURL)
+        guard var request = tokenRequest(baseURL: baseURL) else { return nil }
         request.httpBody = formBody([
             "grant_type": "authorization_code",
             "client_id": Self.clientId,
             "redirect_uri": Self.redirectURIString,
             "code": code,
         ])
-        guard let raw = await performTokenRequest(request) else { return nil }
+        guard case .tokens(let raw) = await performTokenRequest(request) else { return nil }
         return TokenResponse(accessToken: raw.access_token, refreshToken: raw.refresh_token)
     }
 
-    private func tokenRequest(baseURL: URL) -> URLRequest {
+    private func tokenRequest(baseURL: URL) -> URLRequest? {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
         components?.path = "/auth/token"
-        var request = URLRequest(url: components!.url!)
+        guard let url = components?.url else { return nil }
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         return request
     }
 
+    /// Form encoding: everything but letters, digits and `-._~` escaped, so a
+    /// `+`, `&` or `=` in a value can't change its meaning.
+    private static let formValueAllowed = CharacterSet(charactersIn:
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+
     private func formBody(_ params: [String: String]) -> Data? {
         params
             .map { k, v in
-                let key = k.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? k
-                let val = v.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? v
+                let key = k.addingPercentEncoding(withAllowedCharacters: Self.formValueAllowed) ?? k
+                let val = v.addingPercentEncoding(withAllowedCharacters: Self.formValueAllowed) ?? v
                 return "\(key)=\(val)"
             }
             .joined(separator: "&")
             .data(using: .utf8)
     }
 
-    private func performTokenRequest(_ request: URLRequest) async -> RawTokenResponse? {
+    /// A 4xx means Home Assistant said no; anything else (no network, a
+    /// timeout, a 5xx while it restarts) is worth trying again.
+    private func performTokenRequest(_ request: URLRequest) async -> TokenOutcome {
         guard let (data, response) = try? await URLSession.shared.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-        return try? JSONDecoder().decode(RawTokenResponse.self, from: data)
+              let status = (response as? HTTPURLResponse)?.statusCode else { return .unreachable }
+        switch status {
+        case 200:
+            guard let raw = try? JSONDecoder().decode(RawTokenResponse.self, from: data) else { return .rejected }
+            return .tokens(raw)
+        case 400..<500: return .rejected
+        default: return .unreachable
+        }
     }
 
     // MARK: - ASWebAuthenticationPresentationContextProviding

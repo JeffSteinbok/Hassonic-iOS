@@ -32,7 +32,7 @@ def parse_args() -> argparse.Namespace:
         "file",
         nargs="?",
         type=Path,
-        default=REPO_ROOT / "Hassonic" / "DashboardConfig.yaml",
+        default=REPO_ROOT / "Hassonic" / "Config.yaml",
         help="Dashboard YAML to deploy (default: the bundled config).",
     )
     parser.add_argument(

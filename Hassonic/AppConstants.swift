@@ -17,6 +17,12 @@ enum StorageKeys {
     /// The last config that fetched and validated.
     static let lastKnownGoodConfig = "hassonic.dashboard.lastKnownGoodYAML"
     static let lastSelectedTab = "hassonic.lastSelectedTab"
+    /// Server, push token and relay of the last push registration that took,
+    /// so a reconnect doesn't register again.
+    static let pushRegistration = "hassonic.push.registration"
+    /// The media account picked on the Music tab. An old name, kept so the
+    /// pick survives an update.
+    static let selectedMediaAccount = "selectedSpotifyAccountId"
 
     /// The zone last picked for an account, for when Home Assistant omits
     /// `source` while paused.

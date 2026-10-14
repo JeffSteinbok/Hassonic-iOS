@@ -89,8 +89,9 @@ enum DashboardCardActionRouter {
         client.climateSetTemperatureRange(entityID, low: low, high: high)
     }
 
-    static func setThermostatMode<Client: HAClientProtocol>(_ mode: ThermostatState.Mode, entityID: String, client: Client) {
-        client.climateSetHvacMode(entityID, mode: mode.rawValue)
+    /// `autoModeName` is what this thermostat calls Auto (see `ThermostatState`).
+    static func setThermostatMode<Client: HAClientProtocol>(_ mode: ThermostatState.Mode, autoModeName: String = ThermostatState.Mode.auto.rawValue, entityID: String, client: Client) {
+        client.climateSetHvacMode(entityID, mode: mode == .auto ? autoModeName : mode.rawValue)
     }
 
     /// A `weather.*` entity's `temperature`, or a `sensor.*` entity's state.

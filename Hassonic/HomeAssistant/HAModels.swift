@@ -338,7 +338,8 @@ struct HABrowseMediaNode: Decodable, Identifiable {
 
     var id: String {
         if let mediaContentId, !mediaContentId.isEmpty { return mediaContentId }
-        return title ?? UUID().uuidString
+        // Stable from one read to the next, or a list of them can't diff.
+        return title ?? "\(mediaContentType ?? "")|\(thumbnail ?? "")"
     }
 
     var displayTitle: String {
@@ -360,4 +361,22 @@ struct HAServiceDataMessage: Encodable {
     let service: String
     let target: HACallServiceTarget
     let serviceData: [String: JSONValue]
+}
+
+/// Home Assistant's timestamps, like `2026-09-11T21:30:00.123456+00:00`.
+enum HATimestamp {
+    private static let fractional: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+    private static let plain = ISO8601DateFormatter()
+
+    /// Six fractional digits, three, or none: `ISO8601DateFormatter` won't
+    /// always take six, so the fraction is dropped as a last resort.
+    static func parse(_ value: String) -> Date? {
+        if let date = fractional.date(from: value) ?? plain.date(from: value) { return date }
+        let withoutFraction = value.replacingOccurrences(of: #"\.\d+"#, with: "", options: .regularExpression)
+        return plain.date(from: withoutFraction)
+    }
 }

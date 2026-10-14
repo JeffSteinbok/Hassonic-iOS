@@ -84,6 +84,9 @@ struct ThermostatState: Equatable {
     var maxTemp: Double
     /// The modes this thermostat supports, in button order.
     var modes: [Mode]
+    /// What this thermostat calls Auto: `heat_cool`, or `auto` when that's
+    /// the only one it offers.
+    var autoModeName = Mode.auto.rawValue
 
     init(
         mode: Mode?, action: Action, current: Double? = nil, target: Double? = nil,
@@ -103,7 +106,8 @@ struct ThermostatState: Equatable {
     }
 
     /// Whether the card shows one setpoint (heat or cool) or a range (auto).
-    var usesRange: Bool { mode == .auto }
+    /// A schedule-driven `auto` with a single setpoint keeps the one.
+    var usesRange: Bool { mode == .auto && (low != nil || target == nil) }
 
     /// One step from `value`: to the next whole degree, within the
     /// thermostat's limits. Ecobee reports tenths (68.4), and stepping to

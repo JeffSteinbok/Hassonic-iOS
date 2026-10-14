@@ -18,8 +18,8 @@ Reads accounts and zones from the app's config, hassonic.yaml (its
 `media` and `speakerClaim` sections), so it never drifts from what the app
 uses. Pass --config for another copy.
 
-Credentials: reads HA_URL/HA_TOKEN from the environment, falling back to
-.ha.env (gitignored) at the repo root if those aren't already set.
+Credentials: HA_URL and HA_TOKEN from .ha.env (gitignored) at the repo
+root, or the environment.
 
 Usage:
   scripts/ha_music_flow.py status
@@ -29,7 +29,6 @@ Usage:
 
 import argparse
 import json
-import os
 import sys
 import time
 import urllib.error
@@ -37,24 +36,10 @@ import urllib.request
 from pathlib import Path
 
 from build_settings import xcconfig_value
+from ha_env import load_env, require
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_ROOT / f"{xcconfig_value('CONFIG_NAME')}.yaml"
-ENV_FILE_PATH = REPO_ROOT / ".ha.env"
-
-
-def load_env_file(path: Path) -> None:
-    """Minimal KEY="VALUE" .env parser — only fills vars not already set."""
-    if not path.exists():
-        return
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        os.environ.setdefault(key, value)
 
 
 def load_music_config(path: Path = CONFIG_PATH) -> dict:
@@ -269,11 +254,7 @@ def cmd_play_on(client: HAClient, config: dict, account_name: str, zone_name: st
 
 
 def main() -> None:
-    load_env_file(ENV_FILE_PATH)
-
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--base-url", default=os.environ.get("HA_URL"))
-    parser.add_argument("--token", default=os.environ.get("HA_TOKEN"))
     parser.add_argument("--config", type=Path, default=CONFIG_PATH, help="App config to read accounts from")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -286,10 +267,8 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    if not args.base_url or not args.token:
-        raise SystemExit("HA_URL and HA_TOKEN must be set (env, --base-url/--token, or .ha.env)")
-
-    client = HAClient(args.base_url, args.token)
+    env = load_env()
+    client = HAClient(require(env, "HA_URL"), require(env, "HA_TOKEN"))
     config = load_music_config(args.config)
 
     if args.command == "status":

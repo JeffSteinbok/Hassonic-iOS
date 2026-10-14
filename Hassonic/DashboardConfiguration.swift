@@ -12,6 +12,10 @@ struct DashboardConfiguration: Decodable, Equatable {
         guard !pages.isEmpty else {
             throw DashboardConfigurationError.noPages
         }
+        // Rooms open from the strip on the first tab page, so one is needed.
+        guard pages.contains(where: { !$0.isRoom }) else {
+            throw DashboardConfigurationError.onlyRooms
+        }
 
         var pageIDs = Set<String>()
         for page in pages {
@@ -252,6 +256,7 @@ enum DashboardCardConfiguration: Decodable, Equatable {
 enum DashboardConfigurationError: LocalizedError, Equatable {
     case unsupportedVersion(Int)
     case noPages
+    case onlyRooms
     case missingPageID
     case duplicatePageID(String)
     case missingPageTitle(String)
@@ -271,6 +276,8 @@ enum DashboardConfigurationError: LocalizedError, Equatable {
             return "Dashboard configuration version \(version) is not supported."
         case .noPages:
             return "Dashboard configuration must contain at least one page."
+        case .onlyRooms:
+            return "Every page is a room. Rooms open from the first page that isn't one, so add a page without room: true."
         case .missingPageID:
             return "Every dashboard page must have a non-empty id."
         case .duplicatePageID(let id):

@@ -183,8 +183,8 @@ struct SecurityHistoryView: View {
                 }
             }
         }
-        .task { await load() }
-        .refreshable { await load() }
+        // Again once connected: there's no client before then.
+        .task(id: client == nil) { await load() }
         .sheet(item: $selectedEvent) { event in
             NavigationStack {
                 SecurityEventDetailView(

@@ -9,11 +9,6 @@ final class PushNotificationCoordinator: NSObject, ObservableObject {
     @Published private(set) var pushToken: String?
     private lazy var registrar = HAMobileAppRegistrar()
 
-    override init() {
-        super.init()
-        UNUserNotificationCenter.current().delegate = self
-    }
-
     func requestAuthorizationAndRegisterForRemoteNotifications() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
             guard granted else { return }
@@ -37,17 +32,21 @@ final class PushNotificationCoordinator: NSObject, ObservableObject {
               let pushRelayURL = KeychainStore.loadPushRelayURL(),
               !pushRelayURL.isEmpty else { return }
 
+        // Once per server, token and relay: each connect would otherwise
+        // register again.
+        let registration = [baseURL.absoluteString, pushToken, pushRelayURL].joined(separator: "|")
+        guard UserDefaults.standard.string(forKey: StorageKeys.pushRegistration) != registration else { return }
+
         Task {
             do {
                 try await registrar.register(baseURL: baseURL, accessToken: token, pushToken: pushToken, pushURL: pushRelayURL)
+                UserDefaults.standard.set(registration, forKey: StorageKeys.pushRegistration)
             } catch {
                 Log.push.note("Push registration failed: \(error.localizedDescription)")
             }
         }
     }
 }
-
-extension PushNotificationCoordinator: UNUserNotificationCenterDelegate {}
 
 extension PushNotificationCoordinator: MessagingDelegate {
     nonisolated func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
@@ -126,7 +125,7 @@ struct HassonicApp: App {
     @State private var isConnectionOverdue = false
     @State private var overdueTimer: Task<Void, Never>?
     /// Same key MusicZonesView's account switcher writes.
-    @AppStorage("selectedSpotifyAccountId") private var selectedMediaAccountId: String = ""
+    @AppStorage(StorageKeys.selectedMediaAccount) private var selectedMediaAccountId: String = ""
 
     var body: some Scene {
         WindowGroup {
@@ -150,9 +149,7 @@ struct HassonicApp: App {
                 // whether or not Firebase is.
                 let oauthClient = oauthClient
                 haClient.tokenRefresher = { [weak oauthClient] baseURL in
-                    guard let oauthClient,
-                          let refreshToken = KeychainStore.loadRefreshToken() else { return nil }
-                    return await oauthClient.refresh(baseURL: baseURL, refreshToken: refreshToken)
+                    await oauthClient?.refreshUsingSavedToken(baseURL: baseURL) ?? .rejected
                 }
                 Task { await startConnection() }
                 guard appDelegate.isFirebaseConfigured else { return }

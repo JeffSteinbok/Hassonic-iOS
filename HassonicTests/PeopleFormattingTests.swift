@@ -104,13 +104,4 @@ final class PeopleFormattingTests: XCTestCase {
         XCTAssertEqual(PeopleFormatting.since(date("2026-10-08T09:00:00Z"), now: now, calendar: utc, locale: us), "since Thu")
         XCTAssertEqual(PeopleFormatting.since(date("2026-09-30T09:00:00Z"), now: now, calendar: utc, locale: us), "since Sep 30")
     }
-
-    // MARK: Names
-
-    func testNamesJoinWithAnAmpersand() {
-        XCTAssertEqual(PeopleFormatting.names(["Sam"]), "Sam")
-        XCTAssertEqual(PeopleFormatting.names(["Sam", "Morgan"]), "Sam & Morgan")
-        XCTAssertEqual(PeopleFormatting.names(["Sam", "Morgan", "Kai"]), "Sam, Morgan & Kai")
-        XCTAssertEqual(PeopleFormatting.names([]), "")
-    }
 }

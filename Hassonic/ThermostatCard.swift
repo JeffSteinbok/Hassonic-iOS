@@ -27,7 +27,9 @@ extension ThermostatState {
         humidity = entity.attributeDouble("current_humidity")
         minTemp = entity.attributeDouble("min_temp") ?? 45
         maxTemp = entity.attributeDouble("max_temp") ?? 95
-        let offered = Set((entity.attributeStringArray("hvac_modes") ?? []).map { $0 == "auto" ? "heat_cool" : $0 })
+        let hvacModes = Set(entity.attributeStringArray("hvac_modes") ?? [])
+        if hvacModes.contains("auto"), !hvacModes.contains("heat_cool") { autoModeName = "auto" }
+        let offered = Set(hvacModes.map { $0 == "auto" ? "heat_cool" : $0 })
         modes = Mode.allCases.filter { offered.contains($0.rawValue) }
     }
 
@@ -35,7 +37,7 @@ extension ThermostatState {
 
 // MARK: - ThermostatCardView
 
-/// The mocked thermostat: humidity and outside temperature, a status pill,
+/// The thermostat: humidity and outside temperature, a status pill,
 /// the inside temperature, and the setpoint (or the heat_cool range) with −
 /// and +. The modes hide in the status pill's menu. `compact` draws it as
 /// one row instead.
@@ -181,13 +183,6 @@ struct ThermostatCardView: View {
         }
     }
 
-    private func color(for mode: ThermostatState.Mode) -> Color {
-        switch mode {
-        case .heat: return Palette.heat
-        case .cool: return Palette.cool
-        case .auto, .off: return Palette.neutral
-        }
-    }
 
     // MARK: Compact row
 

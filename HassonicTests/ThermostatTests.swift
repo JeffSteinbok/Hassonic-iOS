@@ -106,6 +106,21 @@ final class ThermostatTests: XCTestCase {
         XCTAssertEqual(state.modes, [.heat, .off])
     }
 
+    /// Some thermostats call Auto `auto` and keep one setpoint in it.
+    func testAThermostatWhoseAutoIsAuto() throws {
+        let state = try XCTUnwrap(ThermostatState(HAEntityState(entityId: "climate.x", state: "auto", attributes: [
+            "hvac_modes": .array([.string("auto"), .string("heat"), .string("off")]),
+            "temperature": .number(70),
+        ])))
+        XCTAssertEqual(state.mode, .auto)
+        XCTAssertFalse(state.usesRange)
+        XCTAssertEqual(state.autoModeName, "auto")
+
+        let client = MockHAClient()
+        DashboardCardActionRouter.setThermostatMode(.auto, autoModeName: state.autoModeName, entityID: "climate.x", client: client)
+        XCTAssertEqual(client.serviceCallLog.map(\.method), ["climateSetHvacMode:auto"])
+    }
+
     func testUnavailableIsNil() {
         XCTAssertNil(ThermostatState(HAEntityState(entityId: "climate.x", state: "unavailable", attributes: [:])))
         XCTAssertNil(ThermostatState(nil))

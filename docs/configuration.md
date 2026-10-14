@@ -111,10 +111,12 @@ must be an SF Symbols name.
 | Type | Required fields | Behavior |
 |---|---|---|
 | `light` | `entity: light.*`; optional `icon` (an SF Symbol, or `torchiere`) | On/off toggle with availability state |
-| `cover` | `entity: cover.*` | Open, close, stop, current position, and position slider |
+| `cover` | `entity: cover.*` | Open, close, stop and current position; press and hold for 0, 25, 50, 75 or 100% |
 | `alarm` | `entity: alarm_control_panel.*` | Status, supported arm modes, and confirmed disarm |
 | `llm_vision_timeline` | None | LLM Vision events, images, refresh, and event detail |
 | `thermostat` | `entity: climate.*`; optional `outside: weather.*` or `sensor.*`, `compact: true` | Inside temperature, humidity and outside temperature, a Heating/Cooling/Idle pill, the setpoint with − and + (both heat and cool setpoints in Auto), and the modes the thermostat offers (Heat, Cool, Auto, Off). − and + step to whole degrees and send once you stop tapping. `compact` draws one row: name, status, − setpoint +. |
+| `room` | `image`, `hotspots` (see below) | A picture of the room with a button on each device |
+| `people` | None (see below) | Where everyone is, on a map |
 | `tv_remote` | `tv`, `box`, or both (see below) | One panel per device, both always on screen. TV: power, volume, mute, round pad, Home, Back, play/pause, number keys. Box: page and channel rockers, pad with OK and A–D, Back, Exit, Guide, Info, its menu key, playback, number keys. |
 
 ### `tv_remote`
@@ -164,6 +166,48 @@ without preventing the rest of the dashboard from loading.
 
 The configuration is data only. Card behavior and Home Assistant service calls remain
 implemented and validated by the app.
+
+Keys are case-sensitive, and a key the app doesn't know is ignored rather than
+rejected, by the app and by `validate_config.sh` alike. So a misspelled optional
+key (`exclude_signed_in_user` for `excludeSignedInUser`) does nothing; if a
+setting seems to have no effect, check its spelling here.
+
+## Rooms
+
+A room is a page with `room: true` holding one `room` card: a picture of the
+room with a button on each device, placed where the device is. Rooms don't get
+a tab; they open from the Rooms strip on the first page that isn't a room, so
+a config needs at least one of those.
+
+```yaml
+  - id: kitchen
+    title: Kitchen
+    system_icon: refrigerator
+    room: true
+    sections:
+      - cards:
+          - type: room
+            image: /local/rooms/kitchen.png
+            hotspots:
+              - { entity: light.kitchen_pendants, x: 0.42, y: 0.12 }
+              - { entity: water_heater.upper_oven, x: 0.8, y: 0.35, size: large }
+            status:
+              - { entity: sensor.kitchen_temperature }
+              - { entity: sensor.kitchen_air_quality, label: Air }
+            actions:
+              - { name: All off, icon: power, off: [light.kitchen_pendants] }
+```
+
+| Field | Meaning |
+|---|---|
+| `image` | A path on Home Assistant (`/local/…` is its `www` folder) or a full URL. |
+| `hotspots` | One button each: an `entity`, and `x`, `y` for its centre as a fraction (0 to 1) of the picture's width and height. Optional `label` (what VoiceOver reads; defaults to the friendly name), `icon` (an SF Symbol) and `size` (`regular` or `large`). One entity can have several hotspots. |
+| `status` | Optional chips above the picture, each a sensor's reading: an `entity` and an optional `label`. |
+| `actions` | Optional buttons under the picture. Each has a `name`, an optional `icon`, and entities to turn `on` and `off`, or a `script` to run. |
+
+Lights, fans, switches, input booleans, speakers and covers toggle on a tap;
+a long press opens brightness, speed or volume where the device has them. Anything else (an oven, a sensor)
+opens its sheet on a tap, so a stray tap can't start an oven.
 
 ## The `people` card
 
@@ -238,10 +282,8 @@ Omit the whole block and the app names no provider: no logo, no open-app
 button, and generic copy ("Start playing something on this speaker"). Only
 `name` is required.
 
-The account-switcher's VoiceOver hint is built from the accounts actually
-configured plus this name — it used to be the literal string "Switch between
-Jamie's and Morgan's Spotify accounts", which was wrong the moment a third
-account existed.
+The account-switcher's VoiceOver hint is built from the accounts configured
+plus this name.
 
 ## Live Activity zone buttons
 

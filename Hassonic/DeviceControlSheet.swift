@@ -138,11 +138,10 @@ extension HAEntityState {
 }
 
 private extension HAEntityState {
-    var isOn: Bool { ["on", "playing"].contains(state) }
+    var isOn: Bool { ["on", "playing", "open"].contains(state) }
 
     func attributeStrings(_ key: String) -> [String] {
-        guard case .array(let values)? = attributes[key] else { return [] }
-        return values.compactMap { if case .string(let value) = $0 { return value } else { return nil } }
+        attributeStringArray(key) ?? []
     }
 
     func attributeBool(_ key: String) -> Bool? {

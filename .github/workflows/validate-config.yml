@@ -16,8 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Syntax only; the full schema check (scripts/validate_config.sh) needs
-      # Swift and runs with the app's tests.
+      # Syntax only; the Build workflow runs the full schema check
+      # (scripts/validate_config.sh) on every pull request.
       - name: Parse the YAML and JSON
         run: |
           pip install pyyaml

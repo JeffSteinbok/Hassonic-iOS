@@ -135,8 +135,10 @@ struct TVRemoteCardView: View {
 
     private func press(_ key: TVRemoteKey, on side: TVRemoteSide) {
         presses += 1
-        if key == .power, side == .tv, tvIsOff {
-            assumedOnUntil = .now + 30
+        if key == .power, side == .tv {
+            // Off → assume on until Home Assistant catches up. A second press
+            // while it's only assumed on is turning it back off.
+            assumedOnUntil = isOff ? .now + 30 : nil
         }
         perform(configuration.actions(for: key, on: side))
     }

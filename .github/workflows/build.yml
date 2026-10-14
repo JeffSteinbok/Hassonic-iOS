@@ -16,26 +16,39 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Install xcpretty
-        run: gem install xcpretty
-
       - name: Generate Xcode project
         run: xcodegen generate
 
-      - name: Build
+      # The newest iPhone simulator on the runner, whatever this image calls it.
+      - name: Pick a simulator
+        shell: bash
         run: |
-          xcodebuild -project Hassonic.xcodeproj -scheme Hassonic \
-            -destination 'generic/platform=iOS Simulator' build
+          set -euo pipefail
+          udid=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          runtimes = json.load(sys.stdin)["devices"]
+          ios = sorted((k for k in runtimes if ".iOS-" in k),
+                       key=lambda k: [int(p) for p in k.rsplit(".iOS-", 1)[1].split("-")])
+          phones = [d for d in runtimes[ios[-1]] if d["name"].startswith("iPhone")]
+          print(phones[-1]["udid"])')
+          echo "SIMULATOR_ID=$udid" >> "$GITHUB_ENV"
 
+      # Builds the app and runs the unit tests.
       - name: Test
+        shell: bash
         run: |
+          set -o pipefail
           xcodebuild test \
             -project Hassonic.xcodeproj \
             -scheme Hassonic \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -destination "id=$SIMULATOR_ID" \
             -resultBundlePath TestResults.xcresult \
             -only-testing:HassonicTests \
-            2>&1 | xcpretty --color
+            -quiet
+
+      # The bundled fallback dashboard against the app's real schema.
+      - name: Validate the bundled config
+        run: scripts/validate_config.sh Hassonic/Config.yaml
 
       - name: Upload test results
         if: failure()

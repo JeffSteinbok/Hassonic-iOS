@@ -14,7 +14,7 @@ struct MusicZonesView: View {
     // every existing install's chosen account back to the first entry.
     // Empty default, resolved against the loaded config: accounts arrive with
     // the configuration now, so there is nothing to read at init time.
-    @AppStorage("selectedSpotifyAccountId") private var selectedMediaAccountId: String = ""
+    @AppStorage(StorageKeys.selectedMediaAccount) private var selectedMediaAccountId: String = ""
 
     private var accounts: [MediaAccount] { configuration.mediaAccounts }
 
@@ -303,32 +303,12 @@ struct MusicZonesView: View {
                 rootNode = node
             } else {
                 rootNode = nil
-                if isPlayerIdleOrStopped() && !isNonPlaybackError(response.error) {
+                if MediaBrowseFailure.needsPlayback(playerState: haClient.entity(entityId)?.state, error: response.error) {
                     showPlaybackGuidance = true
                 } else {
                     errorMessage = response.error?.message ?? "This media player does not support browsing."
                 }
             }
-        }
-
-        private func isNonPlaybackError(_ error: HAResultError?) -> Bool {
-            guard let error else { return false }
-            let nonPlaybackCodes: Set<String> = ["unauthorized", "not_allowed", "home_assistant_error", "unknown_error"]
-            if case .string(let code) = error.code, nonPlaybackCodes.contains(code) {
-                return true
-            }
-            let message = (error.message ?? "").lowercased()
-            return message.contains("auth") || message.contains("credential") ||
-                   message.contains("timeout") || message.contains("connection") ||
-                   message.contains("decode") || message.contains("network")
-        }
-
-        /// Stock media_player states — nothing provider-specific, despite
-        /// what this was called before.
-        private func isPlayerIdleOrStopped() -> Bool {
-            guard let entity = haClient.entity(entityId) else { return false }
-            let idleStates: Set<String> = ["idle", "off", "stopped", "unavailable", "unknown"]
-            return idleStates.contains(entity.state)
         }
     }
 
@@ -518,4 +498,27 @@ final class FavoritePlaybackRouter: ObservableObject {
 #Preview {
     MusicZonesView()
         .environmentObject(HAWebSocketClient())
+}
+
+/// Why browsing failed. Many players only browse while something's playing,
+/// so a failure while the player is idle is taken as "play something first",
+/// unless the error is plainly something else (auth, the connection).
+enum MediaBrowseFailure {
+    static func needsPlayback(playerState: String?, error: HAResultError?) -> Bool {
+        let idleStates: Set<String> = ["idle", "off", "stopped", "unavailable", "unknown"]
+        guard let playerState, idleStates.contains(playerState) else { return false }
+        return !isUnrelatedToPlayback(error)
+    }
+
+    static func isUnrelatedToPlayback(_ error: HAResultError?) -> Bool {
+        guard let error else { return false }
+        let unrelatedCodes: Set<String> = ["unauthorized", "not_allowed", "home_assistant_error", "unknown_error"]
+        if case .string(let code) = error.code, unrelatedCodes.contains(code) {
+            return true
+        }
+        let message = (error.message ?? "").lowercased()
+        return message.contains("auth") || message.contains("credential") ||
+               message.contains("timeout") || message.contains("connection") ||
+               message.contains("decode") || message.contains("network")
+    }
 }

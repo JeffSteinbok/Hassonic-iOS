@@ -69,6 +69,23 @@ final class DashboardConfigurationTests: XCTestCase {
         }
     }
 
+    /// Rooms open from the first page that isn't one, so there must be one.
+    func testRejectsADashboardOfOnlyRooms() {
+        let yaml = """
+        version: 1
+        pages:
+          - id: kitchen
+            title: Kitchen
+            system_icon: refrigerator
+            room: true
+            sections: []
+        """
+
+        XCTAssertThrowsError(try DashboardConfigurationParser.parse(yaml)) { error in
+            XCTAssertEqual(error as? DashboardConfigurationError, .onlyRooms)
+        }
+    }
+
     func testRejectsDuplicatePageIDs() {
         let yaml = validYAML.replacingOccurrences(of: "id: security", with: "id: home")
 

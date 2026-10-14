@@ -71,6 +71,9 @@ final class ZonesLiveActivityController {
         )
 
         if let current = activities.first(where: { $0.activityState == .active && !endingIds.contains($0.id) }) {
+            // One left over from before a relaunch still needs watching, or
+            // swiping it away wouldn't stick.
+            observe(current)
             guard !busyIds.contains(current.id) else { return }
             let isDue = Date().timeIntervalSince(lastUpdate[current.id] ?? .distantPast) > Self.refreshInterval
             // Keep a tap's error on screen until something actually changes.
@@ -230,10 +233,7 @@ final class ZonesLiveActivityController {
 
         if client.tokenRefresher == nil {
             let oauthClient = HAOAuthClient()
-            client.tokenRefresher = { baseURL in
-                guard let refreshToken = KeychainStore.loadRefreshToken() else { return nil }
-                return await oauthClient.refresh(baseURL: baseURL, refreshToken: refreshToken)
-            }
+            client.tokenRefresher = { await oauthClient.refreshUsingSavedToken(baseURL: $0) }
         }
         await HAConnectionBootstrapper.connectUsingSavedCredentials(client: client)
 
