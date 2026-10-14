@@ -364,13 +364,13 @@ final class PersonLocationTests: XCTestCase {
 
     func testHomeAssistantTimestampsParse() {
         // Six fractional digits, as HA actually sends.
-        let withFraction = PersonLocationDirectory.parseTimestamp("2026-09-11T21:30:00.123456+00:00")
-        let plain = PersonLocationDirectory.parseTimestamp("2026-09-11T21:30:00+00:00")
+        let withFraction = HATimestamp.parse("2026-09-11T21:30:00.123456+00:00")
+        let plain = HATimestamp.parse("2026-09-11T21:30:00+00:00")
 
         XCTAssertNotNil(withFraction)
         XCTAssertNotNil(plain)
         XCTAssertEqual(withFraction!.timeIntervalSince1970, plain!.timeIntervalSince1970, accuracy: 1)
-        XCTAssertNil(PersonLocationDirectory.parseTimestamp("not a date"))
+        XCTAssertNil(HATimestamp.parse("not a date"))
     }
 
     func testZoneEntryComesFromTheEntityLastChanged() {
@@ -387,7 +387,7 @@ final class PersonLocationTests: XCTestCase {
 
         XCTAssertEqual(
             PersonLocationDirectory.people(from: [entity]).first?.zoneEnteredAt,
-            PersonLocationDirectory.parseTimestamp("2026-09-11T21:30:00.123456+00:00")
+            HATimestamp.parse("2026-09-11T21:30:00.123456+00:00")
         )
     }
 }

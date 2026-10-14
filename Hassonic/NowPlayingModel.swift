@@ -69,6 +69,8 @@ final class NowPlayingTransitionManager: ObservableObject {
     @Published private(set) var committed: NowPlayingPresentation = .empty
 
     private var stagedIdentity: String = ""
+    /// The staged track, as of its latest update: committed once its artwork is in.
+    private var staged: NowPlayingPresentation = .empty
     private var committedIdentity: String = ""
     private var artworkTask: Task<Void, Never>?
 
@@ -79,21 +81,29 @@ final class NowPlayingTransitionManager: ObservableObject {
         let identity = trackIdentity(for: entity)
         let presentation = makePresentation(entity: entity, baseURLString: baseURLString)
 
-        if identity != committedIdentity {
+        if identity == committedIdentity {
+            // Same track — update in-place (position, state, volume won't touch
+            // identity). A track staged meanwhile has been left behind.
+            artworkTask?.cancel()
+            stagedIdentity = ""
+            committed = presentation
+        } else if identity == stagedIdentity {
+            // Its artwork is still loading: keep the newest position for the
+            // commit rather than restarting the load.
+            staged = presentation
+        } else {
             // New track — stage it and begin artwork loading.
             stagedIdentity = identity
+            staged = presentation
             artworkTask?.cancel()
             artworkTask = Task {
-                await loadAndCommit(presentation: presentation, identity: identity)
+                await loadAndCommit(artworkURL: presentation.artworkURL, identity: identity)
             }
-        } else {
-            // Same track — update in-place (position, state, volume won't touch identity).
-            committed = presentation
         }
     }
 
-    private func loadAndCommit(presentation: NowPlayingPresentation, identity: String) async {
-        if let url = presentation.artworkURL {
+    private func loadAndCommit(artworkURL: URL?, identity: String) async {
+        if let url = artworkURL {
             await withTaskGroup(of: Void.self) { group in
                 group.addTask {
                     _ = try? await URLSession.shared.data(from: url)
@@ -105,8 +115,8 @@ final class NowPlayingTransitionManager: ObservableObject {
                 group.cancelAll()
             }
         }
-        guard !Task.isCancelled else { return }
-        commit(presentation: presentation, identity: identity)
+        guard !Task.isCancelled, identity == stagedIdentity else { return }
+        commit(presentation: staged, identity: identity)
     }
 
     private func commit(presentation: NowPlayingPresentation, identity: String) {
@@ -124,12 +134,7 @@ final class NowPlayingTransitionManager: ObservableObject {
         if case .number(let v)? = entity.attributes["media_duration"], v > 0 { duration = v } else { duration = nil }
         let anchorPosition: Double?
         if case .number(let v)? = entity.attributes["media_position"] { anchorPosition = v } else { anchorPosition = nil }
-        let anchorDate: Date?
-        if let raw = entity.attributeString("media_position_updated_at") {
-            anchorDate = ISO8601DateFormatter().date(from: raw)
-        } else {
-            anchorDate = nil
-        }
+        let anchorDate = entity.attributeString("media_position_updated_at").flatMap(HATimestamp.parse)
         return NowPlayingPresentation(
             title: entity.attributeString("media_title"),
             artist: entity.attributeString("media_artist"),

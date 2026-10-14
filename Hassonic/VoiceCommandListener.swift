@@ -30,12 +30,20 @@ final class VoiceCommandListener: ObservableObject {
     private var task: SFSpeechRecognitionTask?
     private var timeout: Task<Void, Never>?
     private var onCommand: ((String) -> Void)?
+    /// Set while asking for permission, before `state` says listening, so a
+    /// second tap can't start a second microphone tap (which traps).
+    private var isStarting = false
 
     /// Starts listening; `onCommand` gets the words once they're finished.
     /// Nothing is handed back if nothing was said.
     func start(onCommand: @escaping (String) -> Void) async {
-        guard state != .listening else { return }
-        guard await Self.authorize() else {
+        guard state != .listening, !isStarting else { return }
+        isStarting = true
+        let authorized = await Self.authorize()
+        // cancel() while asking: the view's gone, so don't open the mic.
+        guard isStarting else { return }
+        isStarting = false
+        guard authorized else {
             state = .denied
             return
         }
@@ -77,7 +85,8 @@ final class VoiceCommandListener: ObservableObject {
             let words = result?.bestTranscription.formattedString
             let isFinal = result?.isFinal ?? false
             Task { @MainActor in
-                guard let self else { return }
+                // A cancelled session still reports in; it mustn't end the next one.
+                guard let self, self.request === request else { return }
                 if let words { self.heard(words) }
                 if isFinal || error != nil { self.finish() }
             }
@@ -92,6 +101,7 @@ final class VoiceCommandListener: ObservableObject {
 
     /// Ends listening and drops what was heard.
     func cancel() {
+        isStarting = false
         onCommand = nil
         finish()
     }

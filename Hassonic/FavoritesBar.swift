@@ -40,6 +40,9 @@ struct FavoritesBar: View {
     @State private var playOnZonePicked = false
     @State private var showFavoritesSheet = false
     @State private var zoneSwitchedAccount = false
+    /// Resends of the last favorite after an account switch; a newer tap
+    /// cancels them so they can't switch back to the old one.
+    @State private var resendTask: Task<Void, Never>?
 
     init(mediaEntityId: String, accountDisplayName: String, speakerClaim: SpeakerClaimConfig?, favorites: [MusicFavorite], zones: [MusicZone], hasMedia: Bool) {
         self.mediaEntityId = mediaEntityId
@@ -58,6 +61,7 @@ struct FavoritesBar: View {
                     ForEach(favorites) { favorite in
                         Button {
                             lightTapHaptic()
+                            resendTask?.cancel()
                             if hasMedia, effectiveActiveSource != nil {
                                 // Already playing somewhere — just swap the track
                                 // in place, no need to ask where to play it again.
@@ -86,20 +90,19 @@ struct FavoritesBar: View {
         .sheet(isPresented: $showFavoritesSheet, onDismiss: {
             favoriteRouter.sheetDismissed(picked: playOnZonePicked) { action in
                 if case .playMedia(let contentType, let contentId, _) = action {
-                    // Backup/precision correction only now — when a switch was
-                    // needed, PlayOnSheet already asks Alexa for this exact
-                    // content by name directly (see desiredContentName), so
-                    // Kitchen shouldn't be stuck on a generic placeholder
-                    // anymore. This still resends the precise API-driven
-                    // request over a longer window in case Alexa's own
-                    // interpretation differs slightly or the API call gets
-                    // dropped by a still-settling handoff — harmless if an
-                    // earlier attempt already worked (just restarts the same
-                    // content). Skipped entirely when no switch was needed.
-                    let delays = zoneSwitchedAccount ? [0.0, 5.0, 12.0, 25.0, 45.0, 70.0] : [0.0]
-                    for delay in delays {
-                        Task {
+                    // When a switch was needed, PlayOnSheet already asked the
+                    // voice assistant for this content by name (see
+                    // desiredContentName). This resends the exact request over
+                    // a longer window in case the assistant's interpretation
+                    // differs or a still-settling handoff drops the call;
+                    // harmless if an earlier attempt worked (it restarts the
+                    // same content). Sent once when no switch was needed.
+                    let delays = zoneSwitchedAccount ? [0.0, 5.0, 7.0, 13.0, 20.0, 25.0] : [0.0]
+                    resendTask?.cancel()
+                    resendTask = Task {
+                        for delay in delays {
                             if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+                            guard !Task.isCancelled else { return }
                             haClient.playMedia(mediaEntityId, contentType: contentType, contentId: contentId)
                         }
                     }
@@ -126,8 +129,8 @@ struct FavoritesBar: View {
     }
 
     /// The human-speakable name of the favorite currently queued to play, if
-    /// any — passed to PlayOnSheet so a fresh account switch can ask Alexa
-    /// for this exact content directly rather than a generic placeholder.
+    /// any — passed to PlayOnSheet so a fresh account switch can ask the voice
+    /// assistant for this exact content directly rather than a generic placeholder.
     private var pendingContentDisplayName: String? {
         if case .playMedia(_, _, let displayName) = favoriteRouter.pendingAction {
             return displayName

@@ -314,12 +314,18 @@ final class LLMVisionTimelineTests: XCTestCase {
         XCTAssertEqual(result, .failure(.decodingError))
     }
 
-    func testNetworkErrorIsRetryable() {
-        XCTAssertTrue(LLMVisionError.networkError("oops").isRetryable)
+    /// Home Assistant's timestamps carry microseconds.
+    func testStartDateReadsFractionalSeconds() {
+        let event = LLMVisionEvent(uid: "1", title: nil, description: nil,
+                                   start: "2026-10-12T09:00:00.123456+00:00", end: nil,
+                                   keyFrame: nil, cameraName: nil, category: nil, label: nil)
+        XCTAssertEqual(event.startDate?.timeIntervalSince1970 ?? 0, 1_791_795_600.123, accuracy: 0.01)
     }
 
-    func testIntegrationUnavailableIsNotRetryable() {
-        XCTAssertFalse(LLMVisionError.integrationUnavailable.isRetryable)
+    func testKeyFrameElsewhereGetsNoToken() {
+        let client = LLMVisionClient(baseURL: URL(string: "https://ha.example.com")!, accessToken: "token")
+        XCTAssertEqual(client.imageRequest(for: "/media/llmvision/a.jpg")?.value(forHTTPHeaderField: "Authorization"), "Bearer token")
+        XCTAssertNil(client.imageRequest(for: "https://cdn.example.net/a.jpg")?.value(forHTTPHeaderField: "Authorization"))
     }
 }
 

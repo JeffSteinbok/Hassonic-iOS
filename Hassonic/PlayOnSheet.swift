@@ -69,6 +69,9 @@ struct PlayOnSheet: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.medium, .large])
+        // Mid-switch the sheet stays up: closing it would let the switch
+        // finish behind it and leave the zone marked as picked.
+        .interactiveDismissDisabled(activeSwitchZone != nil)
         .overlay {
             if activeSwitchZone != nil {
                 statusOverlay

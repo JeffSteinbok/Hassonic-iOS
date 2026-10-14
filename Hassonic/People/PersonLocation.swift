@@ -98,7 +98,7 @@ enum PersonLocationDirectory {
                         baseURLString: baseURLString
                     ),
                     addressLines: addressLines(for: entity, in: entities),
-                    zoneEnteredAt: entity.lastChanged.flatMap(parseTimestamp),
+                    zoneEnteredAt: entity.lastChanged.flatMap(HATimestamp.parse),
                     activity: activity(for: entity, in: entities)
                 )
             }
@@ -179,26 +179,6 @@ enum PersonLocationDirectory {
               !["unknown", "unavailable", "none"].contains(first.lowercased()) else { return [] }
         return lines
     }
-
-    /// HA timestamps carry six fractional digits, which `ISO8601DateFormatter`
-    /// won't always take, so fall back to parsing without them.
-    static func parseTimestamp(_ value: String) -> Date? {
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = fractional.date(from: value) { return date }
-
-        let plain = ISO8601DateFormatter()
-        plain.formatOptions = [.withInternetDateTime]
-        if let date = plain.date(from: value) { return date }
-
-        let withoutFraction = value.replacingOccurrences(
-            of: #"\.\d+"#,
-            with: "",
-            options: .regularExpression
-        )
-        return plain.date(from: withoutFraction)
-    }
-
 
     /// HA reports a person's state as `home`, `not_home`, or the friendly name
     /// of the zone they're in.
