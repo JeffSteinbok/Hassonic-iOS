@@ -23,7 +23,7 @@ func lightTapHaptic() {
 /// "/api/media_player_proxy/...") against the configured base URL.
 func resolveHAImageURL(path: String?, baseURLString: String) -> URL? {
     guard let path else { return nil }
-    if path.hasPrefix("http") { return URL(string: path) }
+    if path.hasPrefix("http") || path.hasPrefix("file:") { return URL(string: path) }
     guard let base = URL(string: baseURLString) else { return nil }
     return URL(string: path, relativeTo: base)?.absoluteURL
 }

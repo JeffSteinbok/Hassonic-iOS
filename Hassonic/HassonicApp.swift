@@ -289,6 +289,11 @@ struct HassonicApp: App {
         isStartingConnection = true
         defer { isStartingConnection = false }
         #if DEBUG && targetEnvironment(simulator)
+        if let demo = DemoMode.entities() {
+            hasSavedConnection = true
+            haClient.showDemo(entities: demo)
+            return
+        }
         HAConnectionBootstrapper.saveCredentialsFromEnvironment()
         #endif
         hasSavedConnection = AppRootState.hasSavedConnection

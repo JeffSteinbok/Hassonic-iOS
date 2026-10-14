@@ -65,6 +65,11 @@ struct PeopleCardView: View {
                 .padding(.horizontal)
             }
         }
+        #if DEBUG && targetEnvironment(simulator)
+        .task {
+            if let id = DemoMode.openHistoryFor { historyFor = people.first { $0.entityId == id } }
+        }
+        #endif
         .sheet(item: $historyFor) { person in
             PersonHistorySheet(person: person)
                 .presentationDetents([.large])

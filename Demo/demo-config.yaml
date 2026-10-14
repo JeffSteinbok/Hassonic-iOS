@@ -1,0 +1,101 @@
+# The dashboard the README screenshots show. A made-up household: nothing
+# here is anyone's real home. scripts/screenshots.py loads it, with the
+# entities it describes, into a simulator.
+version: 1
+
+pages:
+  - id: home
+    title: Home
+    system_icon: house.fill
+    sections:
+      - title: Downstairs
+        cards:
+          - type: light
+            entity: light.porch_lights
+            title: Porch Lights
+          - type: thermostat
+            entity: climate.thermostat
+            title: Thermostat
+            outside: sensor.outdoor_temperature
+          - type: cover
+            entity: cover.awning
+            title: Awning
+
+  - id: remote
+    title: Remote
+    system_icon: appletvremote.gen4.fill
+    sections:
+      - cards:
+          - type: tv_remote
+            title: Living Room
+            tv: { kind: samsung, remote: remote.living_room_tv, mediaPlayer: media_player.living_room_tv }
+            box: { kind: xfinity, remote: remote.cable_box }
+
+  - id: security
+    title: Security
+    system_icon: shield.fill
+    sections:
+      - cards:
+          - type: alarm
+            entity: alarm_control_panel.home_alarm
+
+  - id: living_room
+    title: Living Room
+    system_icon: sofa.fill
+    room: true
+    sections:
+      - cards:
+          - type: room
+            title: Living Room
+            image: "{{DEMO}}/living-room.png"
+            hotspots:
+              - { entity: light.living_room_floor_lamps, icon: torchiere, x: 0.0917, y: 0.1000 }
+              - { entity: light.living_room_floor_lamps, icon: torchiere, x: 0.9083, y: 0.1000 }
+              - { entity: media_player.living_room_tv, icon: tv.fill, x: 0.5000, y: 0.0700 }
+              - { entity: light.living_room_ceiling, icon: light.recessed.fill, x: 0.5000, y: 0.3231 }
+              - { entity: media_player.living_room_speaker, x: 0.1300, y: 0.3200 }
+              - { entity: light.living_room_table_lamps, icon: lamp.table.fill, x: 0.2000, y: 0.8500 }
+              - { entity: light.living_room_table_lamps, icon: lamp.table.fill, x: 0.8000, y: 0.8500 }
+            status:
+              - { entity: sensor.living_room_temperature }
+              - { entity: sensor.living_room_humidity, label: Humidity }
+            actions:
+              - name: Movie Time
+                icon: tv.fill
+                on: [light.living_room_table_lamps]
+                off: [light.living_room_ceiling, light.living_room_floor_lamps]
+              - name: All Off
+                icon: lightbulb.slash.fill
+                off: [light.living_room_ceiling, light.living_room_floor_lamps, light.living_room_table_lamps]
+
+  - id: people
+    title: People
+    system_icon: person.2.fill
+    sections:
+      - cards:
+          - type: people
+
+media:
+  provider:
+    name: Spotify
+    urlScheme: "spotify:"
+    logoAsset: SpotifyLogo
+  accounts:
+    - id: alex
+      displayName: Alex
+      entityId: media_player.spotify_alex
+      favorites:
+        - { displayName: Morning Coffee, icon: cup.and.saucer.fill, contentType: playlist, contentId: "demo:playlist:1" }
+        - { displayName: Focus, icon: brain.head.profile, contentType: playlist, contentId: "demo:playlist:2" }
+        - { displayName: Dinner Jazz, icon: music.note.list, contentType: playlist, contentId: "demo:playlist:3" }
+      speakers:
+        - { entityId: media_player.kitchen_speaker, displayName: Kitchen, sourceName: Kitchen, icon: hifispeaker.fill }
+        - { entityId: media_player.living_room_speaker, displayName: Living Room, sourceName: Living Room, icon: sofa.fill }
+        - { entityId: media_player.office_speaker, displayName: Office, sourceName: Office, icon: desktopcomputer }
+        - { entityId: media_player.patio_speaker, displayName: Patio, sourceName: Patio, icon: sun.max.fill }
+      groups:
+        - entityId: media_player.downstairs
+          displayName: Downstairs
+          sourceName: Downstairs
+          icon: house.fill
+          memberEntityIds: [media_player.kitchen_speaker, media_player.living_room_speaker]

@@ -15,8 +15,8 @@ final class RoomImageStore {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         guard let (data, response) = try? await URLSession.shared.data(for: request),
-              let http = response as? HTTPURLResponse,
-              (200..<300).contains(http.statusCode),
+              // A file URL (the screenshot demo's) has no status to check.
+              (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? url.isFileURL,
               let image = UIImage(data: data) else { return nil }
         images[path] = image
         return image

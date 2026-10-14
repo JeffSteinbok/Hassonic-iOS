@@ -138,8 +138,15 @@ enum PersonHistoryLoader {
         calendar: Calendar = .current,
         urlSession: URLSessionProtocol = URLSession.shared
     ) async throws -> PersonHistory {
-        guard let baseURLString, let baseURL = URL(string: baseURLString), let accessToken else { throw Failure.notSignedIn }
         let (start, end) = dayRange(containing: day, calendar: calendar)
+        #if DEBUG && targetEnvironment(simulator)
+        if let demo = DemoMode.history(for: entityId) {
+            return PersonHistory.build(from: demo.filter {
+                ($0.lastUpdated ?? $0.lastChanged).flatMap(PersonLocationDirectory.parseTimestamp).map { $0 < end } ?? false
+            }, start: start, end: end, now: now)
+        }
+        #endif
+        guard let baseURLString, let baseURL = URL(string: baseURLString), let accessToken else { throw Failure.notSignedIn }
         guard let url = url(baseURL: baseURL, entityId: entityId, start: start, end: min(end, now)) else { throw Failure.notSignedIn }
 
         var request = URLRequest(url: url)

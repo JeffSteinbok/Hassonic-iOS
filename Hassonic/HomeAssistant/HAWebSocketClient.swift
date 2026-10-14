@@ -97,6 +97,17 @@ final class HAWebSocketClient: ObservableObject, HAClientProtocol {
         entities.first { $0.entityId == entityId }
     }
 
+    #if DEBUG && targetEnvironment(simulator)
+    /// Shows `DemoMode`'s made-up entities as if connected, without a socket.
+    func showDemo(entities: [HAEntityState]) {
+        teardownSocket(clearEntities: true)
+        baseURLString = "https://demo.invalid/"
+        accessToken = "demo"
+        self.entities = entities
+        connectionState = .connected
+    }
+    #endif
+
     func connect(baseURL: URL, accessToken: String) {
         cancelReconnect()
         // Preserve entities across a reconnect (transient drop, foreground
