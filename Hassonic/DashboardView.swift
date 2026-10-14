@@ -134,6 +134,7 @@ private struct DashboardCardView: View {
             TVRemoteCardView(
                 configuration: card,
                 tvApp: tvApp(card),
+                tvIsOff: card.tvIsOff(mediaPlayerState: card.tv?.mediaPlayer.flatMap { haClient.entity($0)?.state }),
                 isAvailable: haClient.connectionState == .connected,
                 perform: { DashboardCardActionRouter.perform($0, client: haClient) }
             )

@@ -221,6 +221,13 @@ struct DashboardTVRemoteConfiguration: Decodable, Equatable {
         side == .tv ? tv : box
     }
 
+    /// Whether the TV is certainly off, from its media player's state. Not
+    /// when it's unavailable or there's no media player: then the keys
+    /// stay usable, since it may well be on.
+    func tvIsOff(mediaPlayerState state: String?) -> Bool {
+        tv?.mediaPlayer != nil && ["off", "standby"].contains(state)
+    }
+
     /// The app the TV is certainly showing, from its media player's `source`
     /// and `source_list`: a listed source that isn't an input. Nil when it's
     /// on an input (the box, AirPlay, …) or unknown.

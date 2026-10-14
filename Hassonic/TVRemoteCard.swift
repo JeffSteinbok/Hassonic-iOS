@@ -19,6 +19,9 @@ struct TVRemoteCardView: View {
     /// The app the TV is in, if it certainly is one: shown on the TV panel,
     /// and the box panel is greyed out, since the box isn't on screen.
     var tvApp: String? = nil
+    /// The TV is off: every key but its power is greyed out, the box's too,
+    /// since nothing they send would show.
+    var tvIsOff = false
     let isAvailable: Bool
     let perform: ([TVRemoteAction]) -> Void
 
@@ -28,20 +31,20 @@ struct TVRemoteCardView: View {
     var body: some View {
         VStack(spacing: 12) {
             if let tv = configuration.tv {
-                TVPanel(name: tv.displayName, app: tvApp, press: { press($0, on: .tv) }, showKeypad: { keypad = .tv })
+                TVPanel(name: tv.displayName, app: tvApp, isOff: tvIsOff, press: { press($0, on: .tv) }, showKeypad: { keypad = .tv })
             }
             if let box = configuration.box {
                 BoxPanel(name: box.displayName, menuLabel: box.kind.displayName, press: { press($0, on: .box) }, showKeypad: { keypad = .box })
-                    .disabled(tvApp != nil)
+                    .disabled(boxIsIdle)
                     // Dimmed darker rather than faded, which would wash a
                     // dark panel out to grey on a light background.
                     .overlay {
                         RoundedRectangle(cornerRadius: 26, style: .continuous)
-                            .fill(.black.opacity(tvApp != nil ? 0.55 : 0))
+                            .fill(.black.opacity(boxIsIdle ? 0.55 : 0))
                             .allowsHitTesting(false)
                     }
-                    .animation(.easeInOut(duration: 0.2), value: tvApp)
-                    .accessibilityHint(tvApp.map { "Unavailable while the TV is in \($0)" } ?? "")
+                    .animation(.easeInOut(duration: 0.2), value: boxIsIdle)
+                    .accessibilityHint(tvIsOff ? "Unavailable while the TV is off" : tvApp.map { "Unavailable while the TV is in \($0)" } ?? "")
             }
         }
         .disabled(!isAvailable)
@@ -58,6 +61,9 @@ struct TVRemoteCardView: View {
             .presentationDetents([.medium])
         }
     }
+
+    /// The box isn't on screen: the TV is off, or showing one of its own apps.
+    private var boxIsIdle: Bool { tvIsOff || tvApp != nil }
 
     private func press(_ key: TVRemoteKey, on side: TVRemoteSide) {
         presses += 1
@@ -92,6 +98,8 @@ private struct TVPanel: View {
     let name: String
     /// What the TV is showing, if it's an app.
     let app: String?
+    /// Every key but power is greyed out.
+    let isOff: Bool
     let press: (TVRemoteKey) -> Void
     let showKeypad: () -> Void
 
@@ -105,26 +113,32 @@ private struct TVPanel: View {
                        upLabel: TVRemoteKey.volumeUp.label, downLabel: TVRemoteKey.volumeDown.label,
                        width: 52, height: 148, radius: 26, fill: RemoteColors.tvKey,
                        onUp: { press(.volumeUp) }, onDown: { press(.volumeDown) })
+                    .greyedOut(isOff)
                 Spacer(minLength: 8)
                 roundKey(.mute, systemImage: "speaker.slash.fill")
+                    .greyedOut(isOff)
                     .padding(.leading, 4)
             }
             Spacer(minLength: 8)
             RoundPad(onDirection: { press(TVRemoteKey($0)) })
+                .greyedOut(isOff)
                 .padding(.top, 52)
             Spacer(minLength: 8)
             VStack(spacing: 8) {
                 roundKey(.power, systemImage: "power", tint: RemoteColors.power)
-                roundKey(.home, systemImage: "house")
-                roundKey(.back, systemImage: "arrow.uturn.backward")
-                roundKey(.playPause, systemImage: "playpause.fill")
-                Button(action: showKeypad) {
-                    Text("123")
-                        .font(.subheadline.weight(.bold))
-                        .frame(width: 44, height: 44)
+                Group {
+                    roundKey(.home, systemImage: "house")
+                    roundKey(.back, systemImage: "arrow.uturn.backward")
+                    roundKey(.playPause, systemImage: "playpause.fill")
+                    Button(action: showKeypad) {
+                        Text("123")
+                            .font(.subheadline.weight(.bold))
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(KeyStyle(shape: Circle(), fill: RemoteColors.tvKey, pressed: RemoteColors.tvKeyPressed))
+                    .accessibilityLabel("\(name) number keys")
                 }
-                .buttonStyle(KeyStyle(shape: Circle(), fill: RemoteColors.tvKey, pressed: RemoteColors.tvKeyPressed))
-                .accessibilityLabel("\(name) number keys")
+                .greyedOut(isOff)
             }
         }
         .overlay(alignment: .topLeading) {
@@ -157,6 +171,15 @@ private struct TVPanel: View {
         }
         .buttonStyle(KeyStyle(shape: Circle(), fill: RemoteColors.tvKey, pressed: RemoteColors.tvKeyPressed))
         .accessibilityLabel("\(name) \(key.label)")
+    }
+}
+
+private extension View {
+    /// A key that does nothing while the TV is off: faded and untappable.
+    func greyedOut(_ greyed: Bool) -> some View {
+        disabled(greyed)
+            .opacity(greyed ? 0.3 : 1)
+            .animation(.easeInOut(duration: 0.2), value: greyed)
     }
 }
 
