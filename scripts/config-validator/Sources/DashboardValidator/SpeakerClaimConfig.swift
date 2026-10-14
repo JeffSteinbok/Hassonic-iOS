@@ -1,1 +1,1 @@
-../../../../SteinbokHome/HomeAssistant/SpeakerClaimConfig.swift
+../../../../Hassonic/HomeAssistant/SpeakerClaimConfig.swift

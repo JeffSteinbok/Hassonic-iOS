@@ -1,1 +1,1 @@
-../../../../SteinbokHome/Thermostat.swift
+../../../../Hassonic/Thermostat.swift
