@@ -35,8 +35,10 @@ final class HAWebSocketClient: ObservableObject, HAClientProtocol {
     private var lastBaseURL: URL?
     private var lastAccessToken: String?
     /// Fallback only — a foreground resume reconnects immediately and bypasses
-    /// this entirely. This just covers unexpected mid-session drops.
-    private let reconnectDelay: Duration = .seconds(1)
+    /// this entirely. This just covers unexpected mid-session drops: one
+    /// second, doubling with each failure in a row up to thirty.
+    private static let reconnectDelays: [Duration] = [1, 2, 4, 8, 16, 30].map { .seconds($0) }
+    private var failuresInARow = 0
 
     /// Whether a drop will be retried without anyone stepping in. False after
     /// a manual disconnect or an authentication failure.
@@ -47,11 +49,10 @@ final class HAWebSocketClient: ObservableObject, HAClientProtocol {
     private var connectStartedAt: Date?
     private var hasLoggedFirstEventThisConnection = false
 
-    /// When set, called on `auth_invalid` with the current base URL.
-    /// Should return a fresh access token (e.g. from a refresh-token exchange)
-    /// or `nil` if silent refresh is not possible, in which case the client
-    /// transitions to the `.failed` state so the UI can prompt re-login.
-    var tokenRefresher: ((URL) async -> String?)?
+    /// When set, called on `auth_invalid` with the current base URL to swap
+    /// the refresh token for a new access token. `rejected` fails the
+    /// connection so the UI asks to sign in again; `unreachable` retries.
+    var tokenRefresher: ((URL) async -> HAOAuthClient.Refresh)?
 
     private var nextMessageId = 1
     private var getStatesRequestId: Int?
@@ -123,7 +124,11 @@ final class HAWebSocketClient: ObservableObject, HAClientProtocol {
         hasLoggedFirstEventThisConnection = false
         Log.homeAssistant.note("connecting to \(baseURL.absoluteString)")
 
-        let task = URLSession.shared.webSocketTask(with: Self.webSocketURL(from: baseURL))
+        guard let socketURL = Self.webSocketURL(from: baseURL) else {
+            connectionState = .failed("That Home Assistant address isn't a valid URL.")
+            return
+        }
+        let task = URLSession.shared.webSocketTask(with: socketURL)
         webSocketTask = task
         task.resume()
 
@@ -139,6 +144,9 @@ final class HAWebSocketClient: ObservableObject, HAClientProtocol {
     func disconnect() {
         lastBaseURL = nil
         lastAccessToken = nil
+        accessToken = nil
+        baseURLString = ""
+        currentUserId = nil
         cancelReconnect()
         teardownSocket(clearEntities: true)
         connectionState = .disconnected
@@ -178,13 +186,20 @@ final class HAWebSocketClient: ObservableObject, HAClientProtocol {
         getStatesRequestId = nil
         subscribeEventsRequestId = nil
         currentUserRequestId = nil
+        // Their answers would have come on this socket.
+        let browses = browseMediaRequests
+        browseMediaRequests = [:]
+        for continuation in browses.values {
+            continuation.resume(returning: HABrowseMediaResult(
+                success: false, result: nil, error: HAResultError(code: nil, message: "Lost the connection to Home Assistant")))
+        }
     }
 
-    private static func webSocketURL(from baseURL: URL) -> URL {
-        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+    private static func webSocketURL(from baseURL: URL) -> URL? {
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { return nil }
         components.scheme = (components.scheme == "http") ? "ws" : "wss"
         components.path = "/api/websocket"
-        return components.url!
+        return components.url
     }
 
     private func receiveLoop() async {
@@ -212,15 +227,17 @@ final class HAWebSocketClient: ObservableObject, HAClientProtocol {
         }
     }
 
-    /// Retries once after a delay using the last-known credentials, as long
+    /// Tries again after a delay using the last-known credentials, as long
     /// as nothing else (a manual disconnect, a fresh connect) has happened
-    /// in the meantime.
+    /// in the meantime. Each failure in a row waits longer.
     private func scheduleReconnect() {
         guard let baseURL = lastBaseURL, let accessToken = lastAccessToken else { return }
+        let delay = Self.reconnectDelays[min(failuresInARow, Self.reconnectDelays.count - 1)]
+        failuresInARow += 1
         reconnectTask?.cancel()
         reconnectTask = Task { [weak self] in
             guard let self else { return }
-            try? await Task.sleep(for: reconnectDelay)
+            try? await Task.sleep(for: delay)
             guard !Task.isCancelled, self.lastBaseURL == baseURL, self.lastAccessToken == accessToken else { return }
             self.connect(baseURL: baseURL, accessToken: accessToken)
         }
@@ -236,6 +253,7 @@ final class HAWebSocketClient: ObservableObject, HAClientProtocol {
             sendAuth()
         case "auth_ok":
             logMilestone("auth complete")
+            failuresInARow = 0
             connectionState = .connected
             requestStatesAndSubscribe()
         case "auth_invalid":
@@ -245,10 +263,19 @@ final class HAWebSocketClient: ObservableObject, HAClientProtocol {
                 connectionState = .authenticating
                 Task { [weak self] in
                     guard let self else { return }
-                    if let newToken = await refresher(savedBaseURL) {
+                    let outcome = await refresher(savedBaseURL)
+                    // Signed out, or moved to another server, while refreshing.
+                    guard self.lastBaseURL == savedBaseURL else { return }
+                    switch outcome {
+                    case .refreshed(let newToken):
                         KeychainStore.saveToken(newToken)
                         self.connect(baseURL: savedBaseURL, accessToken: newToken)
-                    } else {
+                    case .unreachable:
+                        // Try again later: the reconnect gets auth_invalid
+                        // and comes back here.
+                        self.connectionState = .failed("Couldn't reach Home Assistant to renew the sign-in.")
+                        self.scheduleReconnect()
+                    case .rejected:
                         self.connectionState = .failed("Authentication failed. Please log in again.")
                         self.lastBaseURL = nil
                         self.lastAccessToken = nil
@@ -284,10 +311,8 @@ final class HAWebSocketClient: ObservableObject, HAClientProtocol {
                     // On success ack, check if the entity state already reflects the new source
                     // (fast path: state may have updated before the ack arrives).
                     let currentSource = entity(pending.entityId)?.attributeString("source")
-                    let normalizedCurrent = currentSource?.trimmingCharacters(in: .whitespacesAndNewlines)
-                        .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-                    let normalizedTarget = pending.expectedSource.trimmingCharacters(in: .whitespacesAndNewlines)
-                        .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+                    let normalizedCurrent = currentSource?.normalizedZoneSourceName
+                    let normalizedTarget = pending.expectedSource.normalizedZoneSourceName
                     if normalizedCurrent == normalizedTarget {
                         pendingSelectSources.removeValue(forKey: id)
                         let elapsed = Date().timeIntervalSince(pending.startedAt)
@@ -319,10 +344,8 @@ final class HAWebSocketClient: ObservableObject, HAClientProtocol {
                 // Check if this event satisfies any pending selectSource.
                 for (messageId, pending) in pendingSelectSources where pending.entityId == newState.entityId {
                     let newSource = newState.attributeString("source")
-                    let normalizedNew = newSource?.trimmingCharacters(in: .whitespacesAndNewlines)
-                        .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-                    let normalizedTarget = pending.expectedSource.trimmingCharacters(in: .whitespacesAndNewlines)
-                        .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+                    let normalizedNew = newSource?.normalizedZoneSourceName
+                    let normalizedTarget = pending.expectedSource.normalizedZoneSourceName
                     if normalizedNew == normalizedTarget {
                         pendingSelectSources.removeValue(forKey: messageId)
                         let elapsed = Date().timeIntervalSince(pending.startedAt)

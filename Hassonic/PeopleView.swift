@@ -84,12 +84,14 @@ struct PeopleCardView: View {
                 }
                 .annotationTitles(.hidden)
             }
-            ForEach(out.filter(\.hasCoordinate)) { person in
-                Annotation(person.givenName, coordinate: person.coordinate!, anchor: .top) {
-                    PersonPin(person: person, accessToken: haClient.accessToken, baseURLString: haClient.baseURLString)
-                        .onTapGesture { focus(on: person.coordinate) }
+            ForEach(out) { person in
+                if let coordinate = person.coordinate {
+                    Annotation(person.givenName, coordinate: coordinate, anchor: .top) {
+                        PersonPin(person: person, accessToken: haClient.accessToken, baseURLString: haClient.baseURLString)
+                            .onTapGesture { focus(on: coordinate) }
+                    }
+                    .annotationTitles(.hidden)
                 }
-                .annotationTitles(.hidden)
             }
         }
         .mapControls { }
@@ -347,12 +349,6 @@ enum PeopleFormatting {
         var style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
         style = days < 7 ? style.weekday(.abbreviated) : style.month(.abbreviated).day()
         return "since " + date.formatted(style)
-    }
-
-    /// "Sam", "Sam & Morgan", "Sam, Morgan & Kai".
-    static func names(_ names: [String]) -> String {
-        guard names.count > 1 else { return names.first ?? "" }
-        return names.dropLast().joined(separator: ", ") + " & " + names.last!
     }
 }
 

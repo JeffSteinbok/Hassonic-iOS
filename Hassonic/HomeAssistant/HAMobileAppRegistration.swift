@@ -1,18 +1,26 @@
 import Foundation
 import UIKit
 
+/// The body of `POST /api/mobile_app/registrations`. Home Assistant drops
+/// keys it doesn't know, so the push fields go in `app_data`, and the stable
+/// `device_id` keeps it to one device per phone.
 struct HAMobileAppRegistrationRequest: Encodable {
+    struct AppData: Encodable, Equatable {
+        let pushToken: String
+        let pushUrl: String
+    }
+
     let appId: String
     let appName: String
     let appVersion: String
+    let deviceId: String
     let deviceName: String
     let manufacturer: String
     let model: String
     let osName: String
     let osVersion: String
     let supportsEncryption = false
-    let pushToken: String
-    let pushUrl: String
+    let appData: AppData
 }
 
 enum HAMobileAppRegistrationError: LocalizedError {
@@ -61,13 +69,13 @@ final class HAMobileAppRegistrar {
             appId: Bundle.main.bundleIdentifier ?? "Hassonic",
             appName: Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Hassonic",
             appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0",
+            deviceId: UIDevice.current.identifierForVendor?.uuidString ?? UIDevice.current.name,
             deviceName: UIDevice.current.name,
             manufacturer: "Apple",
             model: UIDevice.current.model,
             osName: UIDevice.current.systemName,
             osVersion: UIDevice.current.systemVersion,
-            pushToken: pushToken,
-            pushUrl: pushURL
+            appData: .init(pushToken: pushToken, pushUrl: pushURL)
         )
         request.httpBody = try encoder.encode(payload)
 

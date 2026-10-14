@@ -41,9 +41,9 @@ struct LightToggleRow: View {
     }
 }
 
-// MARK: - AwningControlRow
+// MARK: - CoverControlRow
 
-struct AwningControlRow: View {
+struct CoverControlRow: View {
     let label: String
     let entity: HAEntityState?
     let onOpen: () -> Void

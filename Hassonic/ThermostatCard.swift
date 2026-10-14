@@ -183,13 +183,6 @@ struct ThermostatCardView: View {
         }
     }
 
-    private func color(for mode: ThermostatState.Mode) -> Color {
-        switch mode {
-        case .heat: return Palette.heat
-        case .cool: return Palette.cool
-        case .auto, .off: return Palette.neutral
-        }
-    }
 
     // MARK: Compact row
 

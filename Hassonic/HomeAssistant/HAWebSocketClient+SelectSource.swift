@@ -17,10 +17,8 @@ extension HAWebSocketClient {
     /// failure and never sent the actually-requested content.
     func selectSourceConfirmed(_ entityId: String, source: String, timeout: Duration) async -> SelectSourceResult {
         let currentSource = entity(entityId)?.attributeString("source")
-        let normalizedCurrent = currentSource?.trimmingCharacters(in: .whitespacesAndNewlines)
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-        let normalizedTarget = source.trimmingCharacters(in: .whitespacesAndNewlines)
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        let normalizedCurrent = currentSource?.normalizedZoneSourceName
+        let normalizedTarget = source.normalizedZoneSourceName
         if normalizedCurrent == normalizedTarget {
             return .alreadyActive
         }

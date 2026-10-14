@@ -145,7 +145,7 @@ private struct DashboardCardView: View {
 
         case .cover(let card):
             let entity = haClient.entity(card.entity)
-            AwningControlRow(
+            CoverControlRow(
                 label: card.title ?? entity?.friendlyName ?? card.entity,
                 entity: entity,
                 onOpen: {

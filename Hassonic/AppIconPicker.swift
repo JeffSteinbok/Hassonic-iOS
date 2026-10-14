@@ -1,8 +1,8 @@
 import SwiftUI
 import UIKit
 
-/// One choosable home-screen icon. `id` is nil for the primary icon, which is
-/// what `setAlternateIconName` takes to go back to it.
+/// One choosable home-screen icon. `alternateName` is nil for the primary
+/// icon, which is what `setAlternateIconName` takes to go back to it.
 struct AppIconOption: Identifiable, Equatable {
     let alternateName: String?
     let displayName: String

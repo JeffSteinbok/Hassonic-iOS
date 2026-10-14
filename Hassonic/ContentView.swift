@@ -303,9 +303,10 @@ struct ContentView: View {
         defer { isAuthenticating = false }
         guard let url = await resolvedConnectionURL() else { return }
 
-        // Try silent refresh first if we already have a refresh token.
-        if let refreshToken = KeychainStore.loadRefreshToken(),
-           let newAccessToken = await oauthClient.refresh(baseURL: url, refreshToken: refreshToken) {
+        // Try a silent refresh first, but only against the server the saved
+        // refresh token came from: it never goes to a newly typed address.
+        if baseURLString == KeychainStore.loadURL(),
+           case .refreshed(let newAccessToken) = await oauthClient.refreshUsingSavedToken(baseURL: url) {
             saveConnectionSettings()
             KeychainStore.saveToken(newAccessToken)
             haClient.connect(baseURL: url, accessToken: newAccessToken)

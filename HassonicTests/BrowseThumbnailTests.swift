@@ -126,4 +126,24 @@ final class BrowseThumbnailNodeTests: XCTestCase {
         let node = try decoder.decode(HABrowseMediaNode.self, from: json)
         XCTAssertNil(node.thumbnail)
     }
+
+    // MARK: - The token only goes to Home Assistant
+
+    func testTokenGoesToHomeAssistantOnly() throws {
+        let base = "https://ha.example.com:8123/"
+        func auth(_ url: String) throws -> String? {
+            homeAssistantRequest(for: try XCTUnwrap(URL(string: url)), baseURLString: base, accessToken: "secret")
+                .value(forHTTPHeaderField: "Authorization")
+        }
+        XCTAssertEqual(try auth("https://ha.example.com:8123/api/image/x"), "Bearer secret")
+        XCTAssertEqual(try auth("https://HA.example.com:8123/local/a.png"), "Bearer secret")
+        XCTAssertNil(try auth("https://www.gravatar.com/avatar/x"))
+        XCTAssertNil(try auth("https://ha.example.com/api/image/x"), "another port")
+        XCTAssertNil(try auth("http://ha.example.com:8123/api/image/x"), "another scheme")
+    }
+
+    func testDefaultPortsMatch() throws {
+        let url = try XCTUnwrap(URL(string: "https://ha.example.com/x"))
+        XCTAssertTrue(url.hasSameOrigin(as: try XCTUnwrap(URL(string: "https://ha.example.com:443"))))
+    }
 }

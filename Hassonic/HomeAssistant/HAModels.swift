@@ -338,7 +338,8 @@ struct HABrowseMediaNode: Decodable, Identifiable {
 
     var id: String {
         if let mediaContentId, !mediaContentId.isEmpty { return mediaContentId }
-        return title ?? UUID().uuidString
+        // Stable from one read to the next, or a list of them can't diff.
+        return title ?? "\(mediaContentType ?? "")|\(thumbnail ?? "")"
     }
 
     var displayTitle: String {

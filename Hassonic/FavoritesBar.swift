@@ -1,22 +1,5 @@
 import SwiftUI
 
-struct NowPlayingPlaceholderView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "music.note")
-                .font(.system(size: 52, weight: .light))
-                .foregroundStyle(.secondary)
-            Text("Choose something to play")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("No media playing. Choose something to play.")
-    }
-}
-
 struct FavoritesBar: View {
     let mediaEntityId: String
     let accountDisplayName: String

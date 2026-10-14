@@ -68,7 +68,7 @@ final class AppRouter: ObservableObject {
         dashboardPageIDs = Set(tabs.map(\.id))
         if case .dashboard(let selectedPageID) = selectedTab,
            !dashboardPageIDs.contains(selectedPageID) {
-            selectedTab = tabs.first.map { .dashboard($0.id) } ?? .connection
+            selectedTab = tabs.first.map { .dashboard($0.id) } ?? .music
         }
     }
 
@@ -88,8 +88,8 @@ final class AppRouter: ObservableObject {
         selectedTab = pages.first.map { .dashboard($0.id) } ?? .music
     }
 
-    /// The connection tab only shows while disconnected, so it's never a
-    /// place to come back to.
+    /// `.connection` is only the selection before anything's loaded, so it's
+    /// never a place to come back to.
     private func rememberSelectedTab() {
         guard let lastTabStore else { return }
         switch selectedTab {

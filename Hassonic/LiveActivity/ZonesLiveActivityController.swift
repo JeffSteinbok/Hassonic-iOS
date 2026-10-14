@@ -233,10 +233,7 @@ final class ZonesLiveActivityController {
 
         if client.tokenRefresher == nil {
             let oauthClient = HAOAuthClient()
-            client.tokenRefresher = { baseURL in
-                guard let refreshToken = KeychainStore.loadRefreshToken() else { return nil }
-                return await oauthClient.refresh(baseURL: baseURL, refreshToken: refreshToken)
-            }
+            client.tokenRefresher = { await oauthClient.refreshUsingSavedToken(baseURL: $0) }
         }
         await HAConnectionBootstrapper.connectUsingSavedCredentials(client: client)
 

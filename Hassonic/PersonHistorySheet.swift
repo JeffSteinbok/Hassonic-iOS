@@ -79,10 +79,11 @@ struct PersonHistorySheet: View {
                 MapPolyline(coordinates: history.path.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) })
                     .stroke(.blue, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
             }
-            ForEach(history.stays.filter { $0.coordinate != nil }) { stay in
-                Marker(stay.place, systemImage: stay.place == "Home" ? "house.fill" : "mappin",
-                       coordinate: stay.coordinate!)
-                    .tint(stay.place == "Home" ? .green : stay.place == "Away" ? .indigo : .teal)
+            ForEach(history.stays) { stay in
+                if let coordinate = stay.coordinate {
+                    Marker(stay.place, systemImage: stay.place == "Home" ? "house.fill" : "mappin", coordinate: coordinate)
+                        .tint(stay.place == "Home" ? .green : stay.place == "Away" ? .indigo : .teal)
+                }
             }
         }
         .mapControls { }

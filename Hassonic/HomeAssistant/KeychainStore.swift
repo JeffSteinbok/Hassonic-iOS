@@ -84,8 +84,8 @@ enum KeychainStore {
         load(account: "trustedSSID")
     }
 
-    /// Removes all stored credentials (access token, refresh token, base URL, push relay URL).
-    /// Called on logout to ensure no stale credentials remain.
+    /// Removes everything stored here: both tokens, the external and internal
+    /// URLs, the push relay URL and the trusted Wi-Fi name. Called on sign-out.
     static func deleteAll() {
         let accounts = ["accessToken", "refreshToken", "baseURL", "pushRelayURL", "internalURL", "trustedSSID"]
         for account in accounts {

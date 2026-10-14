@@ -24,8 +24,9 @@ final class NowPlayingTransitionTests: XCTestCase {
         if let duration { attrs["media_duration"] = duration }
         if let position { attrs["media_position"] = position }
         if let positionUpdatedAt {
-            let formatter = ISO8601DateFormatter()
-            attrs["media_position_updated_at"] = formatter.string(from: positionUpdatedAt)
+            // As Home Assistant writes it: microseconds and a +00:00 offset.
+            let stamp = ISO8601DateFormatter().string(from: positionUpdatedAt)
+            attrs["media_position_updated_at"] = stamp.replacingOccurrences(of: "Z", with: ".000000+00:00")
         }
 
         let json: [String: Any] = ["entity_id": "media_player.spotify", "state": state, "attributes": attrs]
