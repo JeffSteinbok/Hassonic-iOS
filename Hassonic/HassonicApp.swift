@@ -182,6 +182,13 @@ struct HassonicApp: App {
                 if !hasConnected {
                     hasConnected = true
                     router.selectConnectedLandingPage(from: dashboardLoader.configuration.pages)
+                    #if DEBUG && targetEnvironment(simulator)
+                    // HASSONIC_OPEN_URL: a hassonic:// link to follow once
+                    // connected, without iOS's "Open in…?" prompt.
+                    if let link = ProcessInfo.processInfo.environment["HASSONIC_OPEN_URL"].flatMap(URL.init(string:)) {
+                        router.handle(url: link)
+                    }
+                    #endif
                 }
                 Task {
                     await dashboardLoader.refresh(
@@ -281,6 +288,9 @@ struct HassonicApp: App {
         overdueTimer = nil
         isStartingConnection = true
         defer { isStartingConnection = false }
+        #if DEBUG && targetEnvironment(simulator)
+        HAConnectionBootstrapper.saveCredentialsFromEnvironment()
+        #endif
         hasSavedConnection = AppRootState.hasSavedConnection
         guard hasSavedConnection else { return }
         startOverdueTimer()

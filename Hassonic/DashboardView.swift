@@ -11,10 +11,14 @@ struct DashboardPageView: View {
     var isPushed = false
 
     @EnvironmentObject private var configurationLoader: AppConfigurationLoader
+    @EnvironmentObject private var router: AppRouter
 
     var body: some View {
         if isInMoreTab || isPushed {
             content
+        } else if !rooms.isEmpty {
+            // The router owns the path, so a link can open a room.
+            NavigationStack(path: $router.roomPath) { content }
         } else {
             NavigationStack { content }
         }
@@ -136,6 +140,10 @@ private struct DashboardCardView: View {
                 configuration: card,
                 tvApp: tvApp(card),
                 tvIsOff: card.tvIsOff(mediaPlayerState: card.tv?.mediaPlayer.flatMap { haClient.entity($0)?.state }),
+                refreshTV: {
+                    guard let player = card.tv?.mediaPlayer else { return }
+                    haClient.callService(domain: "homeassistant", service: "update_entity", entityId: player)
+                },
                 isAvailable: haClient.connectionState == .connected,
                 perform: { DashboardCardActionRouter.perform($0, client: haClient) }
             )

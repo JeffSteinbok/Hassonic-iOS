@@ -67,8 +67,9 @@ struct RoomPlanCardView: View {
                 GeometryReader { geometry in
                     ZStack(alignment: .topLeading) {
                         // The room dims a little, and each light that's on
-                        // throws a warm pool around itself.
-                        Color.black.opacity(0.3)
+                        // throws a warm pool around itself. A room with no
+                        // lights to show stays as photographed.
+                        Color.black.opacity(hasLights ? 0.3 : 0)
                         ForEach(litLights) { hotspot in
                             RadialGradient(
                                 colors: [Color(red: 1, green: 0.78, blue: 0.4).opacity(0.7),
@@ -100,6 +101,8 @@ struct RoomPlanCardView: View {
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .shadow(color: .black.opacity(0.35), radius: 16, y: 8)
     }
+
+    private var hasLights: Bool { card.hotspots.contains { $0.domain == "light" } }
 
     private var litLights: [DashboardRoomCardConfiguration.Hotspot] {
         card.hotspots.filter { $0.domain == "light" && haClient.entity($0.entity)?.state == "on" }

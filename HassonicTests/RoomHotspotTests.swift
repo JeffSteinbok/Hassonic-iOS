@@ -83,6 +83,16 @@ final class RoomHotspotTests: XCTestCase {
         XCTAssertEqual(fridge.hotspotReading, "37°")
     }
 
+    /// 0° is a real freezer setpoint, not "nothing set" as it is for an oven.
+    func testAFreezerAtZeroShowsZero() {
+        let freezer = HAEntityState(entityId: "water_heater.freezer", state: "Normal", attributes: [
+            "operation_list": .array([.string("Normal"), .string("Turbo Freeze")]),
+            "temperature": .number(0),
+        ])
+        XCTAssertEqual(freezer.hotspotReading, "0°")
+        XCTAssertEqual(freezer.applianceDetails, ["Set to 0°"])
+    }
+
     func testASensorShowsItsReadingAndOthersShowNothing() {
         let setting = HAEntityState(entityId: "sensor.fridge_setting", state: "37", attributes: ["unit_of_measurement": .string("°F")])
         XCTAssertEqual(setting.hotspotReading, "37°")

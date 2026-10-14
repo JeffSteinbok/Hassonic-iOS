@@ -95,10 +95,12 @@ extension HAEntityState {
         if entityId.hasPrefix("sensor.") { return readableState }
         guard entityId.hasPrefix("water_heater.") else { return nil }
 
-        let target = attributeDouble("temperature").flatMap { $0 > 0 ? Int($0.rounded()) : nil }
         guard attributeStringArray("operation_list")?.contains("off") == true else {
-            return target.map { "\($0)°" }
+            // A fridge or freezer: its setpoint, 0° included.
+            return attributeDouble("temperature").map { "\(Int($0.rounded()))°" }
         }
+        // An oven reports 0 when nothing's set.
+        let target = attributeDouble("temperature").flatMap { $0 > 0 ? Int($0.rounded()) : nil }
         guard isApplianceRunning else { return "Off" }
         guard let current = attributeDouble("current_temperature").map({ Int($0.rounded()) }) else {
             return target.map { "\($0)°" } ?? readableState
@@ -113,7 +115,8 @@ extension HAEntityState {
     var applianceDetails: [String] {
         guard entityId.hasPrefix("water_heater.") else { return [] }
         var details: [String] = []
-        if let target = attributeDouble("temperature"), target > 0 {
+        let canBeOff = attributeStringArray("operation_list")?.contains("off") == true
+        if let target = attributeDouble("temperature"), target > 0 || !canBeOff {
             details.append("Set to \(Int(target.rounded()))°")
         }
         if isApplianceRunning, let current = attributeDouble("current_temperature") {
@@ -272,19 +275,14 @@ private struct ApplianceControls: View {
         ReadOnlyStatus(entity: entity, symbol: symbol)
 
         if !modes.isEmpty {
-            LabeledContent("Mode") {
-                Picker("Mode", selection: Binding(
-                    get: { mode },
-                    set: { haClient.callService(domain: "water_heater", service: "set_operation_mode", entityId: entity.entityId,
-                                                data: ["operation_mode": .string($0)]) }
-                )) {
-                    ForEach(modes, id: \.self) { mode in
-                        Text(mode.prefix(1).uppercased() + mode.dropFirst()).tag(mode)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 8)], spacing: 8) {
+                ForEach(modes, id: \.self) { option in
+                    ModeButton(title: option.prefix(1).uppercased() + option.dropFirst(), isSelected: option == mode) {
+                        haClient.callService(domain: "water_heater", service: "set_operation_mode", entityId: entity.entityId,
+                                             data: ["operation_mode": .string(option)])
                     }
                 }
-                .pickerStyle(.menu)
             }
-            .font(.subheadline)
             .disabled(!entity.isAvailable)
         }
 
@@ -303,6 +301,31 @@ private struct ApplianceControls: View {
             }
             .disabled(!entity.isAvailable)
         }
+    }
+}
+
+/// One of an appliance's modes: filled when it's the current one.
+private struct ModeButton: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .padding(.horizontal, 6)
+                .foregroundStyle(isSelected ? Color.black : Color.primary)
+                .background(isSelected ? AnyShapeStyle(Color.yellow) : AnyShapeStyle(.thinMaterial),
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .sensoryFeedback(.selection, trigger: isSelected)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
