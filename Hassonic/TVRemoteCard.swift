@@ -48,7 +48,9 @@ struct TVRemoteCardView: View {
                          voice: configuration.boxTakesVoice ? BoxPanel.Voice(
                             isListening: voice.state == .listening,
                             caption: voice.state == .listening ? (voice.transcript.isEmpty ? "Listening…" : voice.transcript) : voiceNote,
-                            toggle: toggleVoice
+                            favorites: configuration.voiceFavorites,
+                            toggle: toggleVoice,
+                            send: sendVoice
                          ) : nil,
                          press: { press($0, on: .box) }, showKeypad: { keypad = .box })
                     .disabled(boxIsIdle)
@@ -114,11 +116,7 @@ struct TVRemoteCardView: View {
         }
         voiceNote = nil
         Task {
-            await voice.start { command in
-                presses += 1
-                perform(configuration.voiceActions(command))
-                voiceNote = "“\(command)”"
-            }
+            await voice.start { command in sendVoice(command) }
             switch voice.state {
             case .denied: voiceNote = "Turn on the microphone and speech recognition in Settings"
             case .unavailable: voiceNote = "Voice isn't available right now"
@@ -126,6 +124,13 @@ struct TVRemoteCardView: View {
             }
             voice.reset()
         }
+    }
+
+    /// Sends a command to the box as if it had been spoken.
+    private func sendVoice(_ command: String) {
+        presses += 1
+        perform(configuration.voiceActions(command))
+        voiceNote = "“\(command)”"
     }
 
     private func press(_ key: TVRemoteKey, on side: TVRemoteSide) {
@@ -304,7 +309,10 @@ private struct BoxPanel: View {
         let isListening: Bool
         /// "Listening…", the words so far, or the command just sent.
         let caption: String?
+        /// Saved commands, offered by holding the key.
+        let favorites: [DashboardTVRemoteConfiguration.VoiceFavorite]
         let toggle: () -> Void
+        let send: (String) -> Void
     }
 
     let name: String
@@ -329,7 +337,7 @@ private struct BoxPanel: View {
                 }
                 Spacer(minLength: 0)
                 if let voice {
-                    MicKey(isListening: voice.isListening, action: voice.toggle)
+                    MicKey(isListening: voice.isListening, favorites: voice.favorites, action: voice.toggle, send: voice.send)
                 }
             }
             .animation(.easeInOut(duration: 0.2), value: voice?.caption)
@@ -392,36 +400,77 @@ private struct BoxPanel: View {
 }
 
 /// The voice key: tap and say what you'd say into the box's own voice
-/// remote. It pulses red while listening; tap again to send early.
+/// remote. It pulses red while listening; tap again to send early. Hold it
+/// for the saved commands, when there are any.
 private struct MicKey: View {
     let isListening: Bool
+    let favorites: [DashboardTVRemoteConfiguration.VoiceFavorite]
     let action: () -> Void
+    let send: (String) -> Void
 
     @State private var pulse = false
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: isListening ? "waveform" : "mic.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(isListening ? Color.white : RemoteColors.label)
-                .symbolEffect(.variableColor.iterative, isActive: isListening)
-                .frame(width: 44, height: 44)
-                .background(isListening ? RemoteColors.power : RemoteColors.boxKey, in: Circle())
-                .overlay {
-                    Circle()
-                        .stroke(RemoteColors.power.opacity(isListening ? 0.6 : 0), lineWidth: 3)
-                        .scaleEffect(pulse ? 1.35 : 1)
-                        .opacity(pulse ? 0 : 1)
+        Group {
+            if favorites.isEmpty {
+                Button(action: action) { face }
+                    .buttonStyle(PressScaleButtonStyle())
+            } else {
+                Menu {
+                    ForEach(favorites) { favorite in
+                        Button { send(favorite.say) } label: {
+                            if let icon = favorite.icon {
+                                Label(favorite.name, systemImage: icon)
+                            } else {
+                                Text(favorite.name)
+                            }
+                        }
+                    }
+                } label: {
+                    face
+                } primaryAction: {
+                    action()
                 }
+                .menuStyle(.button)
+                .buttonStyle(PressScaleButtonStyle())
+            }
         }
-        .buttonStyle(PressScaleButtonStyle())
-        .onChange(of: isListening) { _, listening in
-            pulse = false
-            guard listening else { return }
-            withAnimation(.easeOut(duration: 1).repeatForever(autoreverses: false)) { pulse = true }
-        }
-        .accessibilityLabel(isListening ? "Stop listening" : "Voice command")
-        .accessibilityHint(isListening ? "Sends what you've said" : "Say what you'd say into the voice remote, like watch ESPN")
+        .modifier(MicAccessibility(isListening: isListening, hasFavorites: !favorites.isEmpty))
+        .onChange(of: isListening) { _, listening in animatePulse(listening) }
+    }
+
+    private func animatePulse(_ listening: Bool) {
+        pulse = false
+        guard listening else { return }
+        withAnimation(.easeOut(duration: 1).repeatForever(autoreverses: false)) { pulse = true }
+    }
+
+    private var face: some View {
+        Image(systemName: isListening ? "waveform" : "mic.fill")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(isListening ? Color.white : RemoteColors.label)
+            .symbolEffect(.variableColor.iterative, isActive: isListening)
+            .frame(width: 44, height: 44)
+            .background(isListening ? RemoteColors.power : RemoteColors.boxKey, in: Circle())
+            .overlay {
+                Circle()
+                    .stroke(RemoteColors.power.opacity(isListening ? 0.6 : 0), lineWidth: 3)
+                    .scaleEffect(pulse ? 1.35 : 1)
+                    .opacity(pulse ? 0 : 1)
+            }
+    }
+}
+
+private struct MicAccessibility: ViewModifier {
+    let isListening: Bool
+    let hasFavorites: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .accessibilityLabel(isListening ? "Stop listening" : "Voice command")
+            .accessibilityHint(isListening ? "Sends what you've said"
+                               : hasFavorites ? "Say what you'd say into the voice remote, or hold for saved commands"
+                               : "Say what you'd say into the voice remote, like watch ESPN")
     }
 }
 

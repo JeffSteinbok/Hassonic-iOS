@@ -205,8 +205,22 @@ struct DashboardTVRemoteConfiguration: Decodable, Equatable {
         /// power command, e.g. one that blasts IR to turn on a TV whose
         /// network remote is asleep while it's off.
         var power: String?
+        /// Saved spoken commands for a box that takes them, offered by
+        /// holding its voice key: `{ name: ESPN, say: "watch ESPN" }`.
+        var favorites: [VoiceFavorite]?
 
         var displayName: String { name ?? kind.displayName }
+    }
+
+    /// A command you'd otherwise say, saved under a short name.
+    struct VoiceFavorite: Decodable, Equatable, Identifiable {
+        let name: String
+        /// Sent as if spoken into the voice remote.
+        let say: String
+        /// An SF Symbol beside the name in the menu.
+        var icon: String?
+
+        var id: String { name }
     }
 
     let title: String?
@@ -226,6 +240,12 @@ struct DashboardTVRemoteConfiguration: Decodable, Equatable {
     /// Whether the box takes spoken commands: an Xfinity box does, through
     /// its integration's `send_text`.
     var boxTakesVoice: Bool { box?.kind == .xfinity }
+
+    /// The saved commands to offer on the voice key; none for a box that
+    /// can't take them.
+    var voiceFavorites: [VoiceFavorite] {
+        boxTakesVoice ? (box?.favorites ?? []).filter { !$0.name.isEmpty && !$0.say.isEmpty } : []
+    }
 
     /// A spoken command for the box, sent as the words themselves.
     func voiceActions(_ text: String) -> [TVRemoteAction] {
