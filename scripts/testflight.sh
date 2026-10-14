@@ -9,6 +9,9 @@
 #
 # The team comes from DEVELOPMENT_TEAM in Config/Local.xcconfig.
 #
+# Signing in with an App Store Connect API key is more reliable than the
+# Xcode account: set ASC_KEY_PATH (the .p8), ASC_KEY_ID and ASC_ISSUER_ID.
+#
 # Uploading reads the Xcode account from the keychain, so this has to run
 # outside any shell sandbox.
 set -euo pipefail
@@ -43,6 +46,11 @@ cat > "$export_options" <<PLIST
 </plist>
 PLIST
 
+auth=()
+if [[ -n "${ASC_KEY_PATH:-}" && -n "${ASC_KEY_ID:-}" && -n "${ASC_ISSUER_ID:-}" ]]; then
+  auth=(-authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+fi
+
 echo "Building $build_number"
 
 xcodegen generate
@@ -56,12 +64,14 @@ xcodebuild archive \
   -destination 'generic/platform=iOS' \
   -archivePath "$archive_path" \
   -allowProvisioningUpdates \
+  ${auth[@]+"${auth[@]}"} \
   CURRENT_PROJECT_VERSION="$build_number"
 
 xcodebuild -exportArchive \
   -archivePath "$archive_path" \
   -exportOptionsPlist "$export_options" \
   -exportPath "$work_dir/export" \
-  -allowProvisioningUpdates
+  -allowProvisioningUpdates \
+  ${auth[@]+"${auth[@]}"}
 
 echo "Uploaded build $build_number. It shows up in TestFlight once App Store Connect finishes processing it."
