@@ -324,7 +324,8 @@ private struct BoxPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 10) {
+            // Top-aligned, so the name sits where the TV panel's does.
+            HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     PanelCaption(name)
                     if let caption = voice?.caption {
