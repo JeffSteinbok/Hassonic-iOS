@@ -33,6 +33,10 @@ struct TVRemoteCardView: View {
     /// Assistant catches up, or for 30 seconds if it never does.
     @State private var assumedOnUntil: Date?
     @State private var keypad: TVRemoteSide?
+    @StateObject private var voice = VoiceCommandListener()
+    /// The last command sent, or why listening couldn't start, shown on the
+    /// box panel for a few seconds.
+    @State private var voiceNote: String?
 
     var body: some View {
         VStack(spacing: 12) {
@@ -40,7 +44,13 @@ struct TVRemoteCardView: View {
                 TVPanel(name: tv.displayName, app: tvApp, isOff: isOff, press: { press($0, on: .tv) }, showKeypad: { keypad = .tv })
             }
             if let box = configuration.box {
-                BoxPanel(name: box.displayName, menuLabel: box.kind.displayName, press: { press($0, on: .box) }, showKeypad: { keypad = .box })
+                BoxPanel(name: box.displayName, menuLabel: box.kind.displayName,
+                         voice: configuration.boxTakesVoice ? BoxPanel.Voice(
+                            isListening: voice.state == .listening,
+                            caption: voice.state == .listening ? (voice.transcript.isEmpty ? "Listening…" : voice.transcript) : voiceNote,
+                            toggle: toggleVoice
+                         ) : nil,
+                         press: { press($0, on: .box) }, showKeypad: { keypad = .box })
                     .disabled(boxIsIdle)
                     // Dimmed darker rather than faded, which would wash a
                     // dark panel out to grey on a light background.
@@ -70,6 +80,15 @@ struct TVRemoteCardView: View {
             try? await Task.sleep(until: .now + .seconds(max(0, until.timeIntervalSinceNow)), clock: .continuous)
             if !Task.isCancelled { assumedOnUntil = nil }
         }
+        .onChange(of: boxIsIdle) { _, idle in
+            if idle { voice.cancel() }
+        }
+        .onDisappear { voice.cancel() }
+        .task(id: voiceNote) {
+            guard voiceNote != nil else { return }
+            try? await Task.sleep(for: .seconds(4))
+            if !Task.isCancelled { voiceNote = nil }
+        }
         .sheet(item: $keypad) { side in
             NumberPadSheet(title: configuration.device(side)?.displayName ?? "") { entry in
                 presses += 1
@@ -86,6 +105,28 @@ struct TVRemoteCardView: View {
 
     /// The box isn't on screen: the TV is off, or showing one of its own apps.
     private var boxIsIdle: Bool { isOff || tvApp != nil }
+
+    /// Starts listening, or, mid-command, sends what's been heard so far.
+    private func toggleVoice() {
+        if voice.state == .listening {
+            voice.stop()
+            return
+        }
+        voiceNote = nil
+        Task {
+            await voice.start { command in
+                presses += 1
+                perform(configuration.voiceActions(command))
+                voiceNote = "“\(command)”"
+            }
+            switch voice.state {
+            case .denied: voiceNote = "Turn on the microphone and speech recognition in Settings"
+            case .unavailable: voiceNote = "Voice isn't available right now"
+            default: break
+            }
+            voice.reset()
+        }
+    }
 
     private func press(_ key: TVRemoteKey, on side: TVRemoteSide) {
         presses += 1
@@ -258,15 +299,40 @@ private struct RoundPad: View {
 // MARK: - Xfinity panel
 
 private struct BoxPanel: View {
+    /// The microphone key, for a box that takes spoken commands.
+    struct Voice {
+        let isListening: Bool
+        /// "Listening…", the words so far, or the command just sent.
+        let caption: String?
+        let toggle: () -> Void
+    }
+
     let name: String
     /// The main-menu key's wordmark.
     let menuLabel: String
+    var voice: Voice?
     let press: (TVRemoteKey) -> Void
     let showKeypad: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            PanelCaption(name)
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    PanelCaption(name)
+                    if let caption = voice?.caption {
+                        Text(caption)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(RemoteColors.label)
+                            .lineLimit(2)
+                            .transition(.opacity)
+                    }
+                }
+                Spacer(minLength: 0)
+                if let voice {
+                    MicKey(isListening: voice.isListening, action: voice.toggle)
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: voice?.caption)
             HStack(spacing: 0) {
                 Rocker(caption: "PG", upImage: "chevron.up", downImage: "chevron.down",
                        upLabel: TVRemoteKey.pageUp.label, downLabel: TVRemoteKey.pageDown.label,
@@ -322,6 +388,40 @@ private struct BoxPanel: View {
         }
         .buttonStyle(KeyStyle(shape: RoundedRectangle(cornerRadius: 12, style: .continuous), fill: RemoteColors.boxKey, pressed: RemoteColors.boxKeyPressed))
         .accessibilityLabel(label ?? key.label)
+    }
+}
+
+/// The voice key: tap and say what you'd say into the box's own voice
+/// remote. It pulses red while listening; tap again to send early.
+private struct MicKey: View {
+    let isListening: Bool
+    let action: () -> Void
+
+    @State private var pulse = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: isListening ? "waveform" : "mic.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(isListening ? Color.white : RemoteColors.label)
+                .symbolEffect(.variableColor.iterative, isActive: isListening)
+                .frame(width: 44, height: 44)
+                .background(isListening ? RemoteColors.power : RemoteColors.boxKey, in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(RemoteColors.power.opacity(isListening ? 0.6 : 0), lineWidth: 3)
+                        .scaleEffect(pulse ? 1.35 : 1)
+                        .opacity(pulse ? 0 : 1)
+                }
+        }
+        .buttonStyle(PressScaleButtonStyle())
+        .onChange(of: isListening) { _, listening in
+            pulse = false
+            guard listening else { return }
+            withAnimation(.easeOut(duration: 1).repeatForever(autoreverses: false)) { pulse = true }
+        }
+        .accessibilityLabel(isListening ? "Stop listening" : "Voice command")
+        .accessibilityHint(isListening ? "Sends what you've said" : "Say what you'd say into the voice remote, like watch ESPN")
     }
 }
 

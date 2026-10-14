@@ -53,6 +53,9 @@ extension HAWebSocketClient {
     func remoteSendCommand(_ entityId: String, command: String) {
         send(HARemoteSendCommandMessage(id: nextId(), target: .init(entityId: entityId), serviceData: .init(command: command)))
     }
+    func remoteSendText(_ entityId: String, text: String) {
+        callService(domain: "xfinity_remote", service: "send_text", entityId: entityId, data: ["text": .string(text)])
+    }
     func runScript(_ entityId: String) { callService(domain: "script", service: "turn_on", entityId: entityId) }
     func toggle(_ entityId: String) {
         guard let domain = entityId.split(separator: ".").first else { return }

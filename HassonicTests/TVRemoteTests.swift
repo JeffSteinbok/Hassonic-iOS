@@ -194,6 +194,30 @@ final class TVRemoteTests: XCTestCase {
         XCTAssertEqual(remote.digitActions(1, on: .box), [])
     }
 
+    // MARK: Voice
+
+    func testAnXfinityBoxTakesWhatYouSayAsText() throws {
+        let remote = try familyRoom()
+        XCTAssertTrue(remote.boxTakesVoice)
+        XCTAssertEqual(remote.voiceActions("  watch ESPN "), [.sendText(remote: "remote.xfinity", text: "watch ESPN")])
+        XCTAssertEqual(remote.voiceActions("   "), [])
+    }
+
+    func testNoBoxMeansNoVoice() throws {
+        let remote = try card("""
+                    tv: { kind: samsung, remote: remote.tv }
+        """)
+        XCTAssertFalse(remote.boxTakesVoice)
+        XCTAssertEqual(remote.voiceActions("watch ESPN"), [])
+    }
+
+    func testAVoiceCommandReachesTheIntegration() throws {
+        let mock = MockHAClient()
+        DashboardCardActionRouter.perform(try familyRoom().voiceActions("watch ESPN"), client: mock)
+        XCTAssertEqual(mock.serviceCallLog.map(\.method), ["remoteSendText:watch ESPN"])
+        XCTAssertEqual(mock.serviceCallLog.map(\.entityId), ["remote.xfinity"])
+    }
+
     // MARK: The TV's power
 
     func testTheTVIsOffOnlyWhenItsMediaPlayerSaysSo() throws {

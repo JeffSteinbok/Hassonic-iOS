@@ -66,6 +66,8 @@ protocol HAClientProtocol: ObservableObject {
     func coverSetPosition(_ entityId: String, position: Int)
 
     func remoteSendCommand(_ entityId: String, command: String)
+    /// `xfinity_remote.send_text`: a voice-remote command as text.
+    func remoteSendText(_ entityId: String, text: String)
     func runScript(_ entityId: String)
     /// `<domain>.toggle`, for any entity that has one.
     func toggle(_ entityId: String)
