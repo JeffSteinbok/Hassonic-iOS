@@ -90,6 +90,9 @@ struct DashboardSectionConfiguration: Decodable, Equatable {
 struct DashboardEntityCardConfiguration: Decodable, Equatable {
     let entity: String
     let title: String?
+    /// An SF Symbol, or one of the app's own like `torchiere`, for a
+    /// `light` card's row instead of the bulb.
+    var icon: String? = nil
 }
 
 struct DashboardTitledCardConfiguration: Decodable, Equatable {

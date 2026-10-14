@@ -84,6 +84,7 @@ private struct DashboardCardView: View {
             LightToggleRow(
                 label: card.title ?? entity?.friendlyName ?? card.entity,
                 entity: entity,
+                icon: card.icon,
                 onToggle: { isOn in
                     DashboardCardActionRouter.setLight(isOn, entityID: card.entity, client: haClient)
                 }

@@ -110,7 +110,7 @@ must be an SF Symbols name.
 
 | Type | Required fields | Behavior |
 |---|---|---|
-| `light` | `entity: light.*` | On/off toggle with availability state |
+| `light` | `entity: light.*`; optional `icon` (an SF Symbol, or `torchiere`) | On/off toggle with availability state |
 | `cover` | `entity: cover.*` | Open, close, stop, current position, and position slider |
 | `alarm` | `entity: alarm_control_panel.*` | Status, supported arm modes, and confirmed disarm |
 | `llm_vision_timeline` | None | LLM Vision events, images, refresh, and event detail |
