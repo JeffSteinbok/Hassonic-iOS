@@ -10,10 +10,7 @@ final class RoomImageStore {
     func image(_ path: String, client: HAWebSocketClient) async -> UIImage? {
         if let cached = images[path] { return cached }
         guard let url = resolveHAImageURL(path: path, baseURLString: client.baseURLString) else { return nil }
-        var request = URLRequest(url: url)
-        if let token = client.accessToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        let request = homeAssistantRequest(for: url, baseURLString: client.baseURLString, accessToken: client.accessToken)
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               // A file URL (the screenshot demo's) has no status to check.
               (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? url.isFileURL,

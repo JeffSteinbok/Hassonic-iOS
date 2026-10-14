@@ -28,6 +28,28 @@ func resolveHAImageURL(path: String?, baseURLString: String) -> URL? {
     return URL(string: path, relativeTo: base)?.absoluteURL
 }
 
+/// A request for one of Home Assistant's images. The token goes only to Home
+/// Assistant itself: a picture hosted elsewhere (Gravatar, a CDN) never sees
+/// it.
+func homeAssistantRequest(for url: URL, baseURLString: String, accessToken: String?) -> URLRequest {
+    var request = URLRequest(url: url)
+    if let accessToken, !accessToken.isEmpty,
+       let base = URL(string: baseURLString), url.hasSameOrigin(as: base) {
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+    }
+    return request
+}
+
+extension URL {
+    /// Same scheme, host and port: the same server, as far as a token goes.
+    func hasSameOrigin(as other: URL) -> Bool {
+        guard let scheme = scheme?.lowercased(), scheme == other.scheme?.lowercased(),
+              let host = host?.lowercased(), host == other.host?.lowercased() else { return false }
+        let defaultPort = scheme == "https" ? 443 : 80
+        return (port ?? defaultPort) == (other.port ?? defaultPort)
+    }
+}
+
 /// A full-bleed AsyncImage that fills its container without ever inflating
 /// the parent's layout size. `.frame(maxWidth: .infinity)` alone isn't
 /// enough — the loaded image's native aspect ratio can still leak into the
@@ -60,8 +82,8 @@ struct FillImage: View {
 
 private let thumbnailSize: CGFloat = 44
 
-/// Resolves and loads a Browse-node thumbnail, injecting the HA auth header
-/// only for HA-relative paths. Uses `URLSession` caching so repeated rows
+/// Resolves and loads a Browse-node thumbnail, with the HA token only when
+/// it's on Home Assistant. Uses `URLSession` caching so repeated rows
 /// for the same image don't re-download while scrolling.
 struct BrowseThumbnailImage: View {
     let thumbnailPath: String?
@@ -121,11 +143,7 @@ struct BrowseThumbnailImage: View {
         guard let url = resolvedURL else { phase = .failed; return }
         phase = .loading
 
-        var request = URLRequest(url: url)
-        let needsAuth = thumbnailPath.map { !$0.hasPrefix("http") } ?? false
-        if needsAuth, let token = accessToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        let request = homeAssistantRequest(for: url, baseURLString: baseURLString, accessToken: accessToken)
 
         do {
             let (data, _) = try await Self.session.data(for: request)

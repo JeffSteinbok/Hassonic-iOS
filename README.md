@@ -233,6 +233,8 @@ screenshot.
 | `scripts/validate_config.sh <file>` | Checks a config with the app's own parser. |
 | `scripts/deploy_config.py <file>` | Validates a config and copies it to Home Assistant (`--via ssh` or `--via copy`), then checks it's served. Needs `HA_URL` in `.ha.env`. |
 | `scripts/inject_config.py <file>` | Loads a config into the app in a booted simulator, without Home Assistant. |
+| `scripts/export_ha_entities.py` | Writes a sanitized list of your Home Assistant's entities to `docs/home-assistant-entities.json` (gitignored), handy when writing a config. |
+| `scripts/ha_music_flow.py` | Runs the app's speaker-switching flow against your Home Assistant from the command line. |
 | `scripts/add_app_icon.py` | Adds an alternate app icon to the in-app picker. |
 | `scripts/screenshots.py` | Retakes the README screenshots. |
 | `scripts/testflight.sh` | Archives a Release build and uploads it to TestFlight with your `Local.xcconfig`. |

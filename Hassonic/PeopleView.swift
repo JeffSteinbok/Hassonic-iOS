@@ -49,7 +49,7 @@ struct PeopleCardView: View {
                 VStack(spacing: 10) {
                     ForEach(people) { person in
                         Button { historyFor = person } label: {
-                            PersonRow(person: person, home: home, accessToken: haClient.accessToken)
+                            PersonRow(person: person, home: home, accessToken: haClient.accessToken, baseURLString: haClient.baseURLString)
                                 .overlay(alignment: .trailing) {
                                     Image(systemName: "chevron.right")
                                         .font(.footnote.weight(.semibold))
@@ -80,13 +80,13 @@ struct PeopleCardView: View {
         Map(position: $position) {
             if let home {
                 Annotation("Home", coordinate: home, anchor: .center) {
-                    HomePin(people: atHome, accessToken: haClient.accessToken)
+                    HomePin(people: atHome, accessToken: haClient.accessToken, baseURLString: haClient.baseURLString)
                 }
                 .annotationTitles(.hidden)
             }
             ForEach(out.filter(\.hasCoordinate)) { person in
                 Annotation(person.givenName, coordinate: person.coordinate!, anchor: .top) {
-                    PersonPin(person: person, accessToken: haClient.accessToken)
+                    PersonPin(person: person, accessToken: haClient.accessToken, baseURLString: haClient.baseURLString)
                         .onTapGesture { focus(on: person.coordinate) }
                 }
                 .annotationTitles(.hidden)
@@ -130,6 +130,7 @@ struct PeopleCardView: View {
 private struct HomePin: View {
     let people: [PersonLocation]
     let accessToken: String?
+    let baseURLString: String
 
     var body: some View {
         VStack(spacing: 4) {
@@ -141,7 +142,7 @@ private struct HomePin: View {
                 .overlay(Circle().strokeBorder(.white, lineWidth: 3))
                 .shadow(radius: 3, y: 1)
             if !people.isEmpty {
-                AvatarStack(people: people, size: 30, accessToken: accessToken)
+                AvatarStack(people: people, size: 30, accessToken: accessToken, baseURLString: baseURLString)
             }
         }
     }
@@ -151,10 +152,11 @@ private struct HomePin: View {
 private struct PersonPin: View {
     let person: PersonLocation
     let accessToken: String?
+    let baseURLString: String
 
     var body: some View {
         VStack(spacing: 4) {
-            PersonAvatar(person: person, size: 40, accessToken: accessToken)
+            PersonAvatar(person: person, size: 40, accessToken: accessToken, baseURLString: baseURLString)
                 .overlay(Circle().strokeBorder(.white, lineWidth: 3))
                 .shadow(radius: 3, y: 1)
                 .overlay(alignment: .bottomTrailing) {
@@ -182,11 +184,12 @@ private struct AvatarStack: View {
     let people: [PersonLocation]
     let size: CGFloat
     let accessToken: String?
+    let baseURLString: String
 
     var body: some View {
         HStack(spacing: -size * 0.3) {
             ForEach(people) { person in
-                PersonAvatar(person: person, size: size, accessToken: accessToken)
+                PersonAvatar(person: person, size: size, accessToken: accessToken, baseURLString: baseURLString)
                     .overlay(Circle().strokeBorder(.white, lineWidth: 2))
             }
         }
@@ -200,10 +203,11 @@ private struct PersonRow: View {
     let person: PersonLocation
     let home: CLLocationCoordinate2D?
     let accessToken: String?
+    let baseURLString: String
 
     var body: some View {
         HStack(spacing: 12) {
-            PersonAvatar(person: person, size: 46, accessToken: accessToken)
+            PersonAvatar(person: person, size: 46, accessToken: accessToken, baseURLString: baseURLString)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -357,13 +361,14 @@ enum PeopleFormatting {
 /// The profile picture, falling back to initials on a tinted disc while it
 /// loads or when Home Assistant has none.
 ///
-/// Takes the token rather than reading `@EnvironmentObject`: this is a leaf
+/// Takes the token and address rather than reading `@EnvironmentObject`: this is a leaf
 /// used inside a `Map` annotation, and SwiftUI does not carry environment
 /// objects into that closure — reading one there traps at runtime.
 struct PersonAvatar: View {
     let person: PersonLocation
     let size: CGFloat
     let accessToken: String?
+    let baseURLString: String
 
     @State private var image: UIImage?
 
@@ -395,10 +400,7 @@ struct PersonAvatar: View {
             image = nil
             return
         }
-        var request = URLRequest(url: url)
-        if let accessToken {
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        }
+        let request = homeAssistantRequest(for: url, baseURLString: baseURLString, accessToken: accessToken)
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode),

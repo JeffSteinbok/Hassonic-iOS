@@ -72,7 +72,10 @@ struct LLMVisionClient {
     func imageRequest(for path: String) -> URLRequest? {
         guard !path.isEmpty, let url = URL(string: Self.resolveMediaPath(path), relativeTo: baseURL) else { return nil }
         var request = URLRequest(url: url)
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        // An absolute key frame elsewhere doesn't get the token.
+        if url.absoluteURL.hasSameOrigin(as: baseURL) {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
         return request
     }
 
