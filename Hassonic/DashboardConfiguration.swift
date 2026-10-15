@@ -263,6 +263,7 @@ enum DashboardConfigurationError: LocalizedError, Equatable {
     case missingPageIcon(String)
     case invalidEntity(entityID: String, cardType: String, expectedDomain: String)
     case tvRemoteNeedsADevice(cardType: String)
+    case unknownLockScreenKey(String, cardType: String)
     case roomHotspotOutsideImage(entityID: String, cardType: String)
     /// Already-formatted description of a `DecodingError`, which on its own
     /// only ever says "the data isn't in the correct format".
@@ -290,6 +291,8 @@ enum DashboardConfigurationError: LocalizedError, Equatable {
             return "Card '\(cardType)' requires a \(expectedDomain).* entity, not '\(entityID)'."
         case .tvRemoteNeedsADevice(let cardType):
             return "Card '\(cardType)' needs a tv, a box, or both."
+        case .unknownLockScreenKey(let name, let cardType):
+            return "Card '\(cardType)' can't put '\(name)' on the Lock Screen: use open, or tv. or box. and a key, like box.playPause."
         case .roomHotspotOutsideImage(let entityID, let cardType):
             return "Card '\(cardType)' places \(entityID) outside its image: x and y go from 0 to 1."
         }
