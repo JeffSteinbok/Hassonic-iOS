@@ -117,13 +117,26 @@ struct ConnectionFailedView: View {
     }
 }
 
-/// Replaces the old gear button: Settings and About. Reloading the
-/// configuration is pull-to-refresh on the pages themselves.
+/// Replaces the old gear button: Settings and About, and a way to make a
+/// shortcut to the page it's on. Reloading the configuration is
+/// pull-to-refresh on the pages themselves.
 struct AppMenuButton: View {
+    /// The page it's on, for "Add to Shortcuts".
+    var page: AppPage? = nil
+
     @EnvironmentObject private var router: AppRouter
+    @State private var addingShortcut: AppPage?
 
     var body: some View {
         Menu {
+            if let page {
+                Button {
+                    addingShortcut = page
+                } label: {
+                    Label("Add to Shortcuts", systemImage: "square.2.layers.3d")
+                }
+                Divider()
+            }
             Button {
                 router.presentedSheet = .settings
             } label: {
@@ -138,6 +151,9 @@ struct AppMenuButton: View {
             Image(systemName: "line.3.horizontal")
         }
         .accessibilityLabel("Menu")
+        .sheet(item: $addingShortcut) { page in
+            AddPageShortcutSheet(page: page)
+        }
     }
 }
 

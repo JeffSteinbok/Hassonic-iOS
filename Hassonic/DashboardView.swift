@@ -72,7 +72,7 @@ struct DashboardPageView: View {
         .toolbar {
             // Under More, or pushed from a room tile, the leading spot is the back button.
             ToolbarItem(placement: isInMoreTab || isPushed ? .topBarTrailing : .topBarLeading) {
-                AppMenuButton()
+                AppMenuButton(page: AppPage(id: page.id, title: page.title, systemIcon: page.systemIcon))
             }
         }
         .navigationDestination(for: String.self) { roomID in

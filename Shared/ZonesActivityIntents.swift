@@ -52,3 +52,24 @@ struct SetZoneVolumeIntent: LiveActivityIntent {
         return .result()
     }
 }
+
+struct TogglePlaybackIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Play or Pause"
+    static let isDiscoverable = false
+
+    @Parameter(title: "Activity") var activityId: String
+
+    init() {}
+
+    init(activityId: String) {
+        self.activityId = activityId
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+#if !WIDGET_EXTENSION
+        await ZonesLiveActivityController.shared.togglePlayback(activityId: activityId)
+#endif
+        return .result()
+    }
+}

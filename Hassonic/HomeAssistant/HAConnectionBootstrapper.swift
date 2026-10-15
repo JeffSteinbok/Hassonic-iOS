@@ -22,6 +22,29 @@ enum HAConnectionBootstrapper {
         client.connect(baseURL: url, accessToken: accessToken)
     }
 
+    /// Work that starts outside the app's screens (a Live Activity button,
+    /// Siri) can arrive with the app freshly launched in the background, with
+    /// no socket and no entities yet. Connects from the saved credentials and
+    /// waits up to ten seconds for `entityId` to load.
+    @MainActor
+    static func connectAndWait(client: HAWebSocketClient, for entityId: String) async -> Bool {
+        func ready() -> Bool { client.connectionState == .connected && client.entity(entityId) != nil }
+        if ready() { return true }
+
+        if client.tokenRefresher == nil {
+            let oauthClient = HAOAuthClient()
+            client.tokenRefresher = { await oauthClient.refreshUsingSavedToken(baseURL: $0) }
+        }
+        await connectUsingSavedCredentials(client: client)
+
+        for _ in 0..<100 {
+            if ready() { return true }
+            if case .failed = client.connectionState { return false }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return false
+    }
+
     #if DEBUG && targetEnvironment(simulator)
     /// Signs a simulator in without the OAuth flow, for screenshots and UI
     /// checks: launch with HASSONIC_HA_URL and HASSONIC_HA_TOKEN (a long-lived

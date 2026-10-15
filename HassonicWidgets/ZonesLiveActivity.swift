@@ -26,6 +26,11 @@ struct ZonesLiveActivity: Widget {
                     .padding(.leading, 8)
                     .dynamicIsland(verticalPlacement: .belowIfTooWide)
                 }
+                DynamicIslandExpandedRegion(.trailing) {
+                    PlayPauseButton(context: context, size: 36)
+                        .padding(.trailing, 8)
+                        .dynamicIsland(verticalPlacement: .belowIfTooWide)
+                }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(spacing: 6) {
                         ZoneButtons(context: context, style: .tiles)
@@ -72,6 +77,7 @@ private struct ZonesLockScreenView: View {
                     subtitle
                 }
                 Spacer(minLength: 0)
+                PlayPauseButton(context: context, size: 34)
             }
             ZoneButtons(context: context, style: .circles)
             VolumeBar(context: context, trackHeight: 8)
@@ -104,6 +110,28 @@ private struct ZonesLockScreenView: View {
     private var playbackText: String {
         guard context.state.activeZone != nil else { return "Not on a known zone" }
         return context.state.isPlaying ? "Playing" : "Paused"
+    }
+}
+
+/// Plays or pauses the account, wherever it's playing. Hidden when it isn't
+/// on a speaker the app knows, where there's nothing sensible to resume.
+private struct PlayPauseButton: View {
+    let context: ActivityViewContext<ZonesActivityAttributes>
+    let size: CGFloat
+
+    var body: some View {
+        if context.state.activeZone != nil {
+            Button(intent: TogglePlaybackIntent(activityId: context.activityID)) {
+                Image(systemName: context.state.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: size * 0.42, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: size, height: size)
+                    .background(.white.opacity(0.18), in: Circle())
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(context.state.isPlaying ? "Pause" : "Play")
+        }
     }
 }
 

@@ -123,7 +123,7 @@ struct MusicZonesView: View {
             .toolbarColorScheme(hasMedia ? .dark : nil, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    AppMenuButton()
+                    AppMenuButton(page: .music)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 4) {
