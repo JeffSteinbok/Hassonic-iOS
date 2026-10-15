@@ -1,3 +1,4 @@
+import Intents
 import SwiftUI
 import UIKit
 
@@ -125,13 +126,19 @@ struct AppMenuButton: View {
     var page: AppPage? = nil
 
     @EnvironmentObject private var router: AppRouter
-    @State private var addingShortcut: AppPage?
+    @State private var addingShortcut: AddingShortcut?
+
+    private struct AddingShortcut: Identifiable {
+        let page: AppPage
+        let existing: INVoiceShortcut?
+        var id: String { page.id }
+    }
 
     var body: some View {
         Menu {
             if let page {
                 Button {
-                    addingShortcut = page
+                    Task { addingShortcut = AddingShortcut(page: page, existing: await AddPageShortcutSheet.existingShortcut(for: page)) }
                 } label: {
                     Label("Add to Shortcuts", systemImage: "square.2.layers.3d")
                 }
@@ -151,8 +158,8 @@ struct AppMenuButton: View {
             Image(systemName: "line.3.horizontal")
         }
         .accessibilityLabel("Menu")
-        .sheet(item: $addingShortcut) { page in
-            AddPageShortcutSheet(page: page)
+        .sheet(item: $addingShortcut) { adding in
+            AddPageShortcutSheet(page: adding.page, existing: adding.existing)
         }
     }
 }

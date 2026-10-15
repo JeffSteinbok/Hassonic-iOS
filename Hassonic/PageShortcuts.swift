@@ -1,4 +1,6 @@
 import AppIntents
+import Intents
+import IntentsUI
 import SwiftUI
 import UIKit
 
@@ -143,51 +145,103 @@ struct HassonicShortcuts: AppShortcutsProvider {
     }
 }
 
-/// The ☰ menu's "Add to Shortcuts": how to get to this page from the Home
-/// Screen, Siri or the Action button.
-struct AddPageShortcutSheet: View {
+/// The ☰ menu's "Add to Shortcuts": iOS's own Add to Siri sheet, which saves
+/// a real "Open Kitchen" shortcut to My Shortcuts. From there it can go on
+/// the Home Screen or the Action button. An app can't add one without
+/// asking; this is the one way it can ask. A page that already has one gets
+/// iOS's edit sheet for it instead, since a second "Open Kitchen" is refused.
+struct AddPageShortcutSheet: UIViewControllerRepresentable {
     let page: AppPage
+    let existing: INVoiceShortcut?
 
     @Environment(\.dismiss) private var dismiss
 
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Label(page.title, systemImage: page.systemIcon)
-                        .font(.title3.weight(.semibold))
-                }
-                Section("Siri") {
-                    Text("Say “Open \(page.title) in \(AppIdentity.name)”.")
-                }
-                Section {
-                    ShortcutsLink()
-                        .shortcutsLinkStyle(.automaticOutline)
-                        .frame(maxWidth: .infinity)
-                        .listRowBackground(Color.clear)
-                } header: {
-                    Text("Home Screen")
-                } footer: {
-                    Text("In Shortcuts, open \(AppIdentity.name), long-press Open \(page.title), and choose Add to Home Screen. The Action button (Settings › Action Button › Shortcut) and Control Center can run it too.")
-                }
-            }
-            .navigationTitle("Add to Shortcuts")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
+    func makeUIViewController(context: Context) -> UIViewController {
+        if let existing {
+            let controller = INUIEditVoiceShortcutViewController(voiceShortcut: existing)
+            controller.delegate = context.coordinator
+            return controller
         }
-        .presentationDetents([.medium, .large])
+        let controller = INUIAddVoiceShortcutViewController(shortcut: INShortcut(userActivity: page.userActivity))
+        controller.delegate = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ controller: UIViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(dismiss: dismiss) }
+
+    /// The shortcut saved for `page` earlier, if any.
+    static func existingShortcut(for page: AppPage) async -> INVoiceShortcut? {
+        let all: [INVoiceShortcut] = await withCheckedContinuation { continuation in
+            INVoiceShortcutCenter.shared.getAllVoiceShortcuts { shortcuts, _ in continuation.resume(returning: shortcuts ?? []) }
+        }
+        return all.first { $0.shortcut.userActivity.flatMap(AppPage.url(for:)) == page.url }
+    }
+
+    final class Coordinator: NSObject, INUIAddVoiceShortcutViewControllerDelegate, INUIEditVoiceShortcutViewControllerDelegate {
+        let dismiss: DismissAction
+
+        init(dismiss: DismissAction) { self.dismiss = dismiss }
+
+        func addVoiceShortcutViewController(_ controller: INUIAddVoiceShortcutViewController,
+                                            didFinishWith voiceShortcut: INVoiceShortcut?, error: Error?) {
+            if let error { Log.config.note("Add to Siri failed: \(error.localizedDescription)") }
+            dismiss()
+        }
+
+        func addVoiceShortcutViewControllerDidCancel(_ controller: INUIAddVoiceShortcutViewController) {
+            dismiss()
+        }
+
+        func editVoiceShortcutViewController(_ controller: INUIEditVoiceShortcutViewController,
+                                             didUpdate voiceShortcut: INVoiceShortcut?, error: Error?) {
+            dismiss()
+        }
+
+        func editVoiceShortcutViewController(_ controller: INUIEditVoiceShortcutViewController,
+                                             didDeleteVoiceShortcutWithIdentifier deletedVoiceShortcutIdentifier: UUID) {
+            dismiss()
+        }
+
+        func editVoiceShortcutViewControllerDidCancel(_ controller: INUIEditVoiceShortcutViewController) {
+            dismiss()
+        }
     }
 }
 
-/// Catches quick actions: from launch (the scene's connection options) and
-/// while running (`performActionFor`).
+extension AppPage {
+    /// What a saved "Open Kitchen" shortcut runs: it opens the app and hands
+    /// over the page's link (see QuickActionSceneDelegate).
+    static let userActivityType = "hassonic.open-page"
+
+    var userActivity: NSUserActivity {
+        let activity = NSUserActivity(activityType: Self.userActivityType)
+        activity.title = "Open \(title)"
+        activity.userInfo = ["url": url.absoluteString]
+        activity.isEligibleForPrediction = true
+        activity.suggestedInvocationPhrase = "Open \(title)"
+        return activity
+    }
+
+    static func url(for activity: NSUserActivity) -> URL? {
+        guard activity.activityType == userActivityType, let string = activity.userInfo?["url"] as? String else { return nil }
+        return URL(string: string)
+    }
+}
+
+/// Catches quick actions and saved "Open Kitchen" shortcuts: from launch (the
+/// scene's connection options) and while running.
 final class QuickActionSceneDelegate: NSObject, UIWindowSceneDelegate {
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
-        guard let item = connectionOptions.shortcutItem, let url = PageShortcuts.url(for: item) else { return }
+        let url = connectionOptions.shortcutItem.flatMap(PageShortcuts.url(for:))
+            ?? connectionOptions.userActivities.lazy.compactMap(AppPage.url(for:)).first
+        guard let url else { return }
+        Task { @MainActor in PendingLink.shared.url = url }
+    }
+
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        guard let url = AppPage.url(for: userActivity) else { return }
         Task { @MainActor in PendingLink.shared.url = url }
     }
 
