@@ -72,6 +72,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         return true
     }
 
+    /// The scene delegate only catches app-icon quick actions; SwiftUI does
+    /// everything else.
+    func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let configuration = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        configuration.delegateClass = QuickActionSceneDelegate.self
+        return configuration
+    }
+
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         guard isFirebaseConfigured else { return }
         Messaging.messaging().apnsToken = deviceToken
@@ -142,9 +150,16 @@ struct HassonicApp: App {
             .onOpenURL { url in
                 router.handle(url: url)
             }
+            // A Shortcuts action or app-icon quick action. A turn later, so a
+            // cold launch has its pages set (onAppear) before it's handled.
+            .onReceive(PendingLink.shared.$url.compactMap { $0 }) { url in
+                PendingLink.shared.url = nil
+                Task { @MainActor in router.handle(url: url) }
+            }
             .onAppear {
                 appDelegate.pushCoordinator = pushCoordinator
                 router.setDashboardPages(dashboardLoader.configuration.pages)
+                PageShortcuts.update(for: dashboardLoader.configuration.pages)
                 // Token refresh has nothing to do with push, so it's set up
                 // whether or not Firebase is.
                 let oauthClient = oauthClient
@@ -196,9 +211,14 @@ struct HassonicApp: App {
             }
             .onChange(of: dashboardLoader.configuration) { _, configuration in
                 router.setDashboardPages(configuration.pages)
+                PageShortcuts.update(for: configuration.pages)
             }
             .onReceive(haClient.$entities) { _ in syncLiveActivity() }
-            .onChange(of: dashboardLoader.appConfiguration.media) { _, _ in syncLiveActivity() }
+            .onChange(of: dashboardLoader.appConfiguration.media) { _, _ in
+                syncLiveActivity()
+                // Siri's speaker and favorite names.
+                HassonicShortcuts.updateAppShortcutParameters()
+            }
             .onChange(of: selectedMediaAccountId) { _, _ in syncLiveActivity() }
             .onChange(of: pushCoordinator.pushToken) { _, _ in
                 pushCoordinator.registerWithHomeAssistantIfPossible(

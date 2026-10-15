@@ -98,6 +98,9 @@ targets:
         UIBackgroundModes:
           - remote-notification
         NSSupportsLiveActivities: true
+        # What a page shortcut saved through Add to Siri runs.
+        NSUserActivityTypes:
+          - hassonic.open-page
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown

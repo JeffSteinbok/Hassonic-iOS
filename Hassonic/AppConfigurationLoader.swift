@@ -300,6 +300,15 @@ final class AppConfigurationLoader: ObservableObject {
         }
     }
 
+    /// What a fresh launch starts with, the last config that loaded or else
+    /// the bundled one, for Siri and Shortcuts running without the app's
+    /// screens.
+    static func launchConfiguration(bundle: Bundle = .main, defaults: UserDefaults = .standard) -> AppConfiguration? {
+        guard let url = bundle.url(forResource: "Config", withExtension: "yaml"),
+              let bundledYAML = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        return try? selectInitialConfiguration(cachedYAML: defaults.string(forKey: cacheKey), bundledYAML: bundledYAML).configuration
+    }
+
     static func selectInitialConfiguration(
         cachedYAML: String?,
         bundledYAML: String

@@ -23,6 +23,7 @@ final class ZonesLiveActivityController {
     /// lags the service call — without this a quick second tap starts from the
     /// old level.
     private static let optimisticVolumeWindow: TimeInterval = 3
+    private static let optimisticPlayingWindow: TimeInterval = 5
 
     private let client: HAWebSocketClient
 
@@ -37,6 +38,9 @@ final class ZonesLiveActivityController {
     private var observedIds: Set<String> = []
     private var lastUpdate: [String: Date] = [:]
     private var optimisticVolumes: [String: (level: Double, at: Date)] = [:]
+    /// Play/pause as just tapped, until Home Assistant reports it or the
+    /// window passes, so the button doesn't flick back meanwhile.
+    private var optimisticPlaying: (isPlaying: Bool, at: Date)?
 
     /// Nil for the shared client. (A `.shared` default argument would be
     /// evaluated off the main actor.)
@@ -64,11 +68,18 @@ final class ZonesLiveActivityController {
             return
         }
 
-        let state = ZonesActivityContent.state(
+        var state = ZonesActivityContent.state(
             accountEntity: accountEntity,
             zones: ZonesActivityContent.zones(for: account),
             entity: entityWithOptimisticVolume
         )
+        if let held = optimisticPlaying {
+            if held.isPlaying == state.isPlaying || Date().timeIntervalSince(held.at) > Self.optimisticPlayingWindow {
+                optimisticPlaying = nil
+            } else {
+                state.isPlaying = held.isPlaying
+            }
+        }
 
         if let current = activities.first(where: { $0.activityState == .active && !endingIds.contains($0.id) }) {
             // One left over from before a relaunch still needs watching, or
@@ -174,6 +185,24 @@ final class ZonesLiveActivityController {
         await update(activity, to: state)
     }
 
+    /// Shows the new state at once; Home Assistant's own update follows.
+    func togglePlayback(activityId: String) async {
+        guard let activity = activities.first(where: { $0.id == activityId }) else { return }
+        let accountEntityId = activity.attributes.accountEntityId
+
+        var state = activity.content.state
+        guard await ensureConnected(accountEntityId: accountEntityId) else {
+            state.message = "Couldn't reach Home Assistant"
+            await update(activity, to: state)
+            return
+        }
+        client.mediaPlayPause(accountEntityId)
+        state.isPlaying.toggle()
+        optimisticPlaying = (state.isPlaying, Date())
+        state.message = nil
+        await update(activity, to: state)
+    }
+
     func setVolume(to level: Double, activityId: String) async {
         guard let activity = activities.first(where: { $0.id == activityId }),
               let zone = activity.content.state.activeZone else { return }
@@ -224,24 +253,7 @@ final class ZonesLiveActivityController {
         return HAEntityState(entityId: entity.entityId, state: entity.state, attributes: attributes, lastChanged: entity.lastChanged)
     }
 
-    /// A tap can arrive with the app freshly launched in the background, with
-    /// no socket and no entities yet. Connects from the saved credentials and
-    /// waits until the account's entity has loaded.
     private func ensureConnected(accountEntityId: String) async -> Bool {
-        func ready() -> Bool { client.connectionState == .connected && client.entity(accountEntityId) != nil }
-        if ready() { return true }
-
-        if client.tokenRefresher == nil {
-            let oauthClient = HAOAuthClient()
-            client.tokenRefresher = { await oauthClient.refreshUsingSavedToken(baseURL: $0) }
-        }
-        await HAConnectionBootstrapper.connectUsingSavedCredentials(client: client)
-
-        for _ in 0..<100 {
-            if ready() { return true }
-            if case .failed = client.connectionState { return false }
-            try? await Task.sleep(for: .milliseconds(100))
-        }
-        return false
+        await HAConnectionBootstrapper.connectAndWait(client: client, for: accountEntityId)
     }
 }
