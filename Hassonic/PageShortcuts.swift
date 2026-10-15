@@ -191,9 +191,10 @@ final class QuickActionSceneDelegate: NSObject, UIWindowSceneDelegate {
         Task { @MainActor in PendingLink.shared.url = url }
     }
 
-    func windowScene(_ windowScene: UIWindowScene, performActionFor shortcutItem: UIApplicationShortcutItem) async -> Bool {
-        guard let url = PageShortcuts.url(for: shortcutItem) else { return false }
-        await MainActor.run { PendingLink.shared.url = url }
-        return true
+    func windowScene(_ windowScene: UIWindowScene, performActionFor shortcutItem: UIApplicationShortcutItem,
+                     completionHandler: @escaping (Bool) -> Void) {
+        guard let url = PageShortcuts.url(for: shortcutItem) else { return completionHandler(false) }
+        Task { @MainActor in PendingLink.shared.url = url }
+        completionHandler(true)
     }
 }
