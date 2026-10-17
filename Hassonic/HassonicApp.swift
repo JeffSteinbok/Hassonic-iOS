@@ -170,6 +170,10 @@ struct HassonicApp: App {
                 switch sheet {
                 case .settings: ContentView()
                 case .about: AboutView()
+                case .assistant:
+                    if let configuration = dashboardLoader.appConfiguration.assistant {
+                        AssistantView(configuration: configuration)
+                    }
                 }
             }
             .environmentObject(haClient)
@@ -325,17 +329,12 @@ struct HassonicApp: App {
                 MusicZonesView()
                     .tabItem { Label("Music", systemImage: "music.note") }
                     .tag(AppTab.music)
-                if let configuration = dashboardLoader.appConfiguration.assistant {
-                    AssistantView(configuration: configuration)
-                        .tabItem { Label(configuration.title, systemImage: configuration.systemIcon) }
-                        .tag(AppTab.assistant)
-                }
                 let pages = dashboardLoader.configuration.pages.filter { !$0.isRoom }
                 let rooms = dashboardLoader.configuration.pages.filter(\.isRoom)
                 ForEach(Array(pages.enumerated()), id: \.element.id) { index, page in
                     DashboardPageView(
                         page: page,
-                        isInMoreTab: AppTab.isInMore(tabIndex: index + 1 + (dashboardLoader.appConfiguration.assistant == nil ? 0 : 1), tabCount: pages.count + 1 + (dashboardLoader.appConfiguration.assistant == nil ? 0 : 1)),
+                        isInMoreTab: AppTab.isInMore(tabIndex: index + 1, tabCount: pages.count + 1),
                         rooms: index == 0 ? rooms : []
                     )
                         .tabItem { Label(page.title, systemImage: page.systemIcon) }

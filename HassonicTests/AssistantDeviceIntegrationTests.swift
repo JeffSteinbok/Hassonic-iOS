@@ -24,18 +24,16 @@ final class AssistantDeviceIntegrationTests: XCTestCase {
         model.activate(configuration: configuration)
         try model.pair(setupCode)
         let deadline = Date().addingTimeInterval(90)
-        while Date() < deadline, model.state != .connected || model.isLoadingHistory {
+        while Date() < deadline, model.state != .connected {
             if model.state == .needsPairing, let error = model.errorMessage { XCTFail(error); return }
             try await Task.sleep(for: .milliseconds(100))
         }
         XCTAssertEqual(model.state, .connected, "The phone must connect using its own signed device identity.")
         guard model.state == .connected else { return }
-        let before = model.transcript.messages.count
         model.send("Connectivity test from Hassonic on this iPhone. Reply exactly HASSONIC_DEVICE_OK. Do not call any tools.")
         let replyDeadline = Date().addingTimeInterval(90)
         while Date() < replyDeadline {
-            let replies = model.transcript.messages.dropFirst(before).filter { !$0.isUser }
-            if replies.contains(where: { $0.text.contains("HASSONIC_DEVICE_OK") }), model.activeRunID == nil {
+            if model.directive?.response.contains("HASSONIC_DEVICE_OK") == true, model.directive?.status == .completed {
                 XCTAssertNotNil(try OpenClawCredentialStore().credential(), "Keep the device credential for normal app use.")
                 return
             }

@@ -4,11 +4,18 @@ struct AssistantView: View {
     let configuration: AssistantConfiguration
     @EnvironmentObject private var model: AssistantChatModel
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var voice = VoiceCommandListener()
+    @GestureState private var isHolding = false
     @State private var draft = ""
     @State private var setupCode = ""
     @State private var pairingError: String?
     @State private var showingConnection = false
-    @FocusState private var composerFocused: Bool
+    @State private var showingReview = false
+    @State private var confirmingNewDirective = false
+    @State private var isCancelling = false
+    @State private var recordingTask: Task<Void, Never>?
+    @FocusState private var reviewFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -17,13 +24,17 @@ struct AssistantView: View {
                     pairingView
                 } else {
                     statusBar
-                    conversation
+                    if let directive = model.directive {
+                        directiveScreen(directive)
+                    } else {
+                        captureScreen
+                    }
                 }
             }
             .navigationTitle(configuration.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { AppMenuButton() }
+                ToolbarItem(placement: .topBarLeading) { Button("Done") { dismiss() } }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showingConnection = true } label: { Image(systemName: "info.circle") }
                         .accessibilityLabel("Assistant connection")
@@ -38,10 +49,18 @@ struct AssistantView: View {
             }
         }
         .task(id: configuration) { activate() }
-        .onDisappear { model.pause() }
+        .onDisappear {
+            recordingTask?.cancel()
+            voice.cancel()
+            if model.directive?.status != .running { model.pause() }
+        }
+        .onChange(of: isHolding) { _, holding in
+            if holding { beginRecording() }
+            else { finishRecording() }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { activate() }
-            else if phase == .background { model.pause() }
+            else if phase == .background { recordingTask?.cancel(); voice.cancel(); model.pause() }
         }
     }
 
@@ -123,72 +142,202 @@ struct AssistantView: View {
         case .needsPairing: return "Not connected"
         case .connecting: return "Connecting…"
         case .waitingForApproval: return "Waiting for approval…"
-        case .connected: return model.isLoadingHistory ? "Loading conversation…" : "Connected"
+        case .connected: return "Connected"
         case .disconnected: return "Reconnecting…"
         }
     }
 
-    private var conversation: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    if model.transcript.messages.isEmpty, model.state == .connected, !model.isLoadingHistory {
-                        ContentUnavailableView("Ask your assistant", systemImage: configuration.systemIcon,
-                                               description: Text("Send a message to start the conversation."))
+    private var captureScreen: some View {
+        ScrollView {
+            VStack(spacing: 26) {
+                if !showingReview {
+                    VStack(spacing: 10) {
+                        Text("What would you like done?").font(.title.bold())
+                        Text("Hold to record a directive, then review and send it.")
+                            .foregroundStyle(.secondary)
                     }
-                    ForEach(model.transcript.messages) { message in
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(message.isUser ? "You" : configuration.title)
-                                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                            Text(message.isUser ? AttributedString(message.text) :
-                                 ((try? AttributedString(markdown: message.text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(message.text)))
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .padding(14)
-                        .background(message.isUser ? Color.accentColor.opacity(0.10) : Color(.secondarySystemBackground),
-                                    in: RoundedRectangle(cornerRadius: 16))
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 28)
+
+                    ZStack {
+                        Circle().fill(Color.accentColor.opacity(0.1)).frame(width: 180, height: 180)
+                        Circle().fill(isHolding ? Color.red.gradient : Color.accentColor.gradient)
+                            .frame(width: 140, height: 140)
+                        Image(systemName: voice.state == .listening ? "waveform" : "mic.fill")
+                            .font(.system(size: 48, weight: .medium)).foregroundStyle(.white)
                     }
-                    if model.activeRunID != nil {
-                        HStack(spacing: 8) { ProgressView(); Text("Working…").foregroundStyle(.secondary) }
-                            .font(.subheadline)
+                    .scaleEffect(isHolding ? 1.06 : 1)
+                    .animation(.easeInOut(duration: 0.15), value: isHolding)
+                    .contentShape(Circle())
+                    .allowsHitTesting(!voice.isFinishing)
+                    .gesture(DragGesture(minimumDistance: 0).updating($isHolding) { _, holding, _ in holding = true })
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(voice.state == .listening ? "Stop recording directive" : "Record directive")
+                    .accessibilityHint("Touch and hold to record. With VoiceOver, double tap to start or stop. Recording never sends automatically.")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction {
+                        if voice.state == .listening { finishRecording() }
+                        else { beginRecording() }
                     }
-                    Color.clear.frame(height: 1).id("latest")
+                    .accessibilityIdentifier("assistant.record")
+
+                    VStack(spacing: 8) {
+                        Text(voice.isFinishing ? "Preparing your directive…" : isHolding ? "Release when you're done" : "Hold to record")
+                            .font(.headline)
+                        if voice.state == .listening {
+                            Text(voice.transcript.isEmpty ? "Listening…" : voice.transcript)
+                                .foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        } else {
+                        Text("Nothing is sent until you tap Send directive.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                 }
-                .frame(maxWidth: 760)
-                .padding()
-                .frame(maxWidth: .infinity)
+                voiceFeedback
+                } else {
+                    Text("Review your directive")
+                        .font(.title.bold())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 24)
+                }
+
+                if showingReview || !draft.isEmpty {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack {
+                            Text("Your directive").font(.headline)
+                            Spacer()
+                            Button("Record again") {
+                                draft = ""
+                                showingReview = false
+                                reviewFocused = false
+                            }
+                            .font(.subheadline)
+                        }
+                        TextField("Review or edit your directive", text: $draft, axis: .vertical)
+                            .lineLimit(3...8).focused($reviewFocused)
+                            .accessibilityIdentifier("assistant.directive")
+                        HStack {
+                            Button("Discard", role: .destructive) {
+                                voice.cancel()
+                                draft = ""
+                                showingReview = false
+                                reviewFocused = false
+                            }
+                            Spacer()
+                            Text("Review before sending").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(20)
+                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20))
+                    Button {
+                        voice.cancel()
+                        model.send(draft)
+                        if model.directive != nil {
+                            draft = ""
+                            showingReview = false
+                            reviewFocused = false
+                        }
+                    } label: {
+                        Label("Send directive", systemImage: "arrow.up.circle.fill")
+                            .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 8)
+                    }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .disabled(model.state != .connected || voice.state == .listening || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draft.count > 16_000)
+                    .accessibilityIdentifier("assistant.send")
+                } else {
+                    Button("Type a directive instead") { showingReview = true; reviewFocused = true }
+                        .font(.subheadline)
+                }
             }
-            .scrollDismissesKeyboard(.interactively)
-            .onChange(of: model.transcript.messages) { _, _ in proxy.scrollTo("latest", anchor: .bottom) }
-            .safeAreaInset(edge: .bottom) { composer }
+            .frame(maxWidth: 600)
+            .padding(24)
+            .frame(maxWidth: .infinity)
+        }
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    @ViewBuilder private var voiceFeedback: some View {
+        if voice.state == .denied {
+            VStack(spacing: 8) {
+                Text("Allow microphone and speech recognition access to record a directive.")
+                    .font(.callout).multilineTextAlignment(.center)
+                Link("Open Settings", destination: URL(string: UIApplication.openSettingsURLString)!)
+            }
+        } else if voice.state == .unavailable {
+            Text("Voice recording is unavailable right now. You can type your directive instead.")
+                .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }
     }
 
-    private var composer: some View {
-        HStack(alignment: .bottom, spacing: 12) {
-            TextField("Message", text: $draft, axis: .vertical)
-                .lineLimit(1...6)
-                .textFieldStyle(.roundedBorder)
-                .focused($composerFocused)
-                .disabled(model.state != .connected || model.isLoadingHistory)
-                .accessibilityIdentifier("assistant.message")
-            if model.activeRunID != nil {
-                Button { Task { await model.stop() } } label: { Image(systemName: "stop.circle.fill").font(.title2) }
-                    .accessibilityLabel("Stop response")
-            } else {
-                Button {
-                    model.send(draft)
-                    draft = ""
-                    composerFocused = false
-                } label: { Image(systemName: "arrow.up.circle.fill").font(.title2) }
-                .disabled(model.state != .connected || model.isLoadingHistory || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draft.count > 16_000)
-                .accessibilityLabel("Send message")
-                .accessibilityIdentifier("assistant.send")
+    private func beginRecording() {
+        reviewFocused = false
+        voice.reset()
+        recordingTask?.cancel()
+        recordingTask = Task {
+            await voice.start(mode: .hold) { words in
+                draft = words
+                showingReview = true
             }
         }
-        .padding()
-        .background(.bar)
+    }
+
+    private func finishRecording() {
+        recordingTask?.cancel()
+        recordingTask = nil
+        voice.stop()
+    }
+
+    private func directiveScreen(_ directive: AssistantDirective) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                VStack(spacing: 14) {
+                    if directive.status == .running {
+                        ProgressView().controlSize(.large)
+                    } else {
+                        Image(systemName: directive.status == .completed ? "checkmark.circle.fill" : "exclamationmark.circle")
+                            .font(.system(size: 52))
+                            .foregroundStyle(directive.status == .completed ? Color.green : Color.secondary)
+                    }
+                    Text(directive.progress).font(.title2.bold()).multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity).padding(.vertical, 20)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Directive").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Text(directive.text).textSelection(.enabled)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(20)
+                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20))
+                if !directive.response.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(directive.status == .running ? "Progress" : "Result").font(.headline)
+                        Text((try? AttributedString(markdown: directive.response, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(directive.response))
+                            .textSelection(.enabled)
+                    }
+                }
+                if directive.status == .running {
+                    Button(isCancelling ? "Stopping…" : "Stop directive", role: .destructive) {
+                        isCancelling = true
+                        Task { await model.stop(); isCancelling = false }
+                    }
+                    .buttonStyle(.bordered).disabled(isCancelling)
+                } else {
+                    Button {
+                        if directive.status == .interrupted { confirmingNewDirective = true }
+                        else { model.clearDirective() }
+                    } label: {
+                        Text("New directive").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 8)
+                    }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .confirmationDialog("Start another directive?", isPresented: $confirmingNewDirective, titleVisibility: .visible) {
+                        Button("New directive") { model.clearDirective() }
+                    } message: { Text("The previous directive may still be running on OpenClaw. Starting another will not cancel or resend it.") }
+                }
+            }
+            .frame(maxWidth: 600, alignment: .leading)
+            .padding(24)
+            .frame(maxWidth: .infinity)
+        }
+        .accessibilityIdentifier("assistant.progress")
     }
 }
 

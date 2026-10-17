@@ -1,6 +1,6 @@
 # Assistant
 
-Hassonic chats only with the `hassonic` agent on your OpenClaw gateway. Enable the tab in
+Hassonic sends directives only to the `hassonic` agent on your OpenClaw gateway. Enable Assistant in
 your Home Assistant-hosted YAML:
 
 ```yaml
@@ -14,13 +14,13 @@ The agent is fixed to `hassonic` in app code. Legacy `assistant.agent` values
 are ignored, including in cached configurations. `session` can select another
 conversation within that agent and accepts 1–64 lowercase letters, digits,
 underscores and hyphens, starting with a letter or digit.
-Without this block there is no Assistant tab, no gateway
+Without this block there is no Assistant microphone, no gateway
 connection and no Assistant Keychain access. `assistant` becomes a reserved
-page ID while the tab is enabled.
+page ID while Assistant is enabled.
 
-The tab follows Music, ahead of configured dashboard pages. If there are
-more than five tabs, iOS puts the later pages under More. Room pages still
-open from Home.
+A microphone beside the hamburger menu opens Assistant from Music, dashboard
+pages and rooms. It presents a directive sheet without changing the current
+page or adding a tab. `hassonic://assistant` opens the same sheet.
 
 ## Pair a device
 
@@ -35,7 +35,7 @@ On the gateway host:
 openclaw qr --limited --setup-code-only --url wss://your-gateway.example
 ```
 
-Open Assistant, paste that setup code, and tap Connect. Treat the code as a
+Tap the microphone, paste that setup code, and tap Connect. Treat the code as a
 secret. Depending on the gateway's mobile pairing policy, the code itself
 authorizes pairing or the owner must approve the pending request:
 
@@ -71,17 +71,24 @@ policies separately; Hassonic does not change them or grant additional tools.
 Gateways using verified-person roles may reject device-token authentication;
 identity-proxy authentication is not implemented in this client.
 
-## Conversation and recovery
+## Record, send and track a directive
 
-- Replies stream; the most recent 100 history messages load when connecting.
-- Stop requests cancellation of the current run. It cannot undo an action
+- Hold the large microphone to record. Pauses do not end the recording;
+  release it to finish, with a one-minute recording limit.
+- Review and optionally edit the transcription, then tap Send directive.
+  Recording never sends automatically. You can also type a directive.
+- The sheet shows live progress and the final result for that directive.
+  New directive clears the result. There is no conversation history or chat UI.
+- With VoiceOver, double tap the microphone to start and stop recording.
+- Stop directive requests cancellation of the current run. It cannot undo an action
   that already happened.
-- Leaving the tab or backgrounding closes the socket. Returning reconnects
-  and reloads history. Interrupted sends are never automatically resent.
-- If a send is interrupted, check history before resending: the gateway may
-  already have accepted and executed the command.
+- Closing the sheet while a directive is running keeps its connection alive
+  while the app is in the foreground. Tap the toolbar microphone to return.
+- Backgrounding closes the socket and marks an unfinished directive's status
+  unavailable. It may still be running on OpenClaw. No directive is automatically
+  resent, and a missed final response is not reconstructed from shared history.
 - Assistant connection details and Forget gateway are available from the
-  tab's information button and Settings. Forget deletes local credentials
+  sheet's information button and Settings. Forget deletes local credentials
   and the device key; it does not revoke the server's device record.
 - Revoke a lost device on the gateway, using the device ID shown in Settings:
 
@@ -90,8 +97,8 @@ identity-proxy authentication is not implemented in this client.
   ```
 
 Chat frames, setup codes and credentials are not logged. Tool results and
-hidden reasoning are not rendered in the transcript. Conversation history
-is held in memory and retrieved from the gateway, not cached in app defaults.
+hidden reasoning are not rendered. Only the current device's directive and
+result are held in memory; shared conversation history is not fetched.
 
 ## Notifications
 

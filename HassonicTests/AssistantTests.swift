@@ -114,16 +114,17 @@ final class AssistantTranscriptTests: XCTestCase {
 
 @MainActor
 final class AssistantRoutingTests: XCTestCase {
-    func testAssistantLinkOnlyWorksWhenEnabledAndRemovalSelectsMusic() throws {
+    func testAssistantLinkOpensSheetOnCurrentPageAndRemovalDismissesIt() throws {
         let router = AppRouter()
         let url = try XCTUnwrap(URL(string: "hassonic://assistant"))
         router.handle(url: url)
         XCTAssertEqual(router.selectedTab, .connection)
         router.setAssistantEnabled(true)
         router.handle(url: url)
-        XCTAssertEqual(router.selectedTab, .assistant)
+        XCTAssertEqual(router.presentedSheet, .assistant)
+        XCTAssertEqual(router.selectedTab, .connection)
         router.setAssistantEnabled(false)
-        XCTAssertEqual(router.selectedTab, .music)
+        XCTAssertNil(router.presentedSheet)
     }
 
     func testAllChatRPCsPinHassonicEvenWhenExtrasTryToOverrideIt() {
@@ -265,20 +266,25 @@ final class AssistantLifecycleTests: XCTestCase {
         let model = AssistantChatModel(store: FakeOpenClawStore(), gateway: OpenClawGatewayClient(makeSocket: { _ in socket }))
         defer { model.pause() }
         model.activate(configuration: AssistantConfiguration())
-        for _ in 0..<200 where model.state != .connected || model.isLoadingHistory { await Task.yield() }
+        for _ in 0..<200 where model.state != .connected { await Task.yield() }
         XCTAssertEqual(model.state, .connected)
+        XCTAssertFalse(socket.sent.contains { $0["method"] as? String == "chat.history" })
+        model.send("Test directive")
+        let runID = try XCTUnwrap(model.directive?.runID)
         for (run, session, agent, text) in [
-            ("other-session", "agent:family:main", "family", "Wrong session"),
-            ("other-agent", "agent:hassonic:main", "family", "Wrong agent"),
-            ("allowed", "agent:hassonic:main", "hassonic", "Allowed")
+            (runID, "agent:family:main", "family", "Wrong session"),
+            (runID, "agent:hassonic:main", "family", "Wrong agent"),
+            ("someone-else", "agent:hassonic:main", "hassonic", "Other device"),
+            (runID, "agent:hassonic:main", "hassonic", "Allowed")
         ] {
             socket.emit(["type": "event", "event": "chat", "payload": [
                 "runId": run, "sessionKey": session, "agentId": agent, "seq": 1,
                 "state": "final", "message": ["content": text]
             ]])
         }
-        for _ in 0..<200 where model.transcript.messages.isEmpty { await Task.yield() }
-        XCTAssertEqual(model.transcript.messages.map(\.text), ["Allowed"])
+        for _ in 0..<200 where model.directive?.status == .running { await Task.yield() }
+        XCTAssertEqual(model.directive?.response, "Allowed")
+        XCTAssertEqual(model.directive?.status, .completed)
     }
 
     func testConstructionAndDemoDoNotReadKeychainOrConnect() {
@@ -290,7 +296,10 @@ final class AssistantLifecycleTests: XCTestCase {
         model.activate(configuration: AssistantConfiguration(), demo: true)
         XCTAssertEqual(store.reads, 0)
         XCTAssertEqual(connections, 0)
-        XCTAssertEqual(model.transcript.messages.count, 2)
+        XCTAssertTrue(model.transcript.messages.isEmpty)
+        XCTAssertNil(model.directive)
+        model.send("Preview directive")
+        XCTAssertEqual(model.directive?.status, .completed)
         model.pause()
     }
 
@@ -302,7 +311,7 @@ final class AssistantLifecycleTests: XCTestCase {
         let gateway = OpenClawGatewayClient(makeSocket: { _ in connections += 1; return socket })
         let model = AssistantChatModel(store: store, gateway: gateway)
         model.activate(configuration: AssistantConfiguration())
-        for _ in 0..<200 where model.state != .connected || model.isLoadingHistory { await Task.yield() }
+        for _ in 0..<200 where model.state != .connected { await Task.yield() }
         XCTAssertEqual(model.state, .connected)
         model.pause()
         for _ in 0..<20 { await Task.yield() }

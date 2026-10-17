@@ -418,9 +418,11 @@ Parse failures name the offending key and its path, with array indices as `[n]` 
 The warning on the dashboard is sticky: it clears only on the next successful fetch,
 which happens on the next launch, return to the foreground, or pull-to-refresh.
 
-## Assistant tab
+## Assistant directives
 
-An optional top-level `assistant` block enables OpenClaw chat. Gateway credentials
+An optional top-level `assistant` block enables the microphone beside the menu on
+each page. It opens a hold-to-record directive sheet with progress and a result.
+Gateway credentials
 are paired on each device and never belong in this file:
 
 ```yaml

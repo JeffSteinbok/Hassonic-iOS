@@ -126,6 +126,8 @@ struct AppMenuButton: View {
     var page: AppPage? = nil
 
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var configurationLoader: AppConfigurationLoader
+    @EnvironmentObject private var assistant: AssistantChatModel
     @State private var addingShortcut: AddingShortcut?
 
     private struct AddingShortcut: Identifiable {
@@ -135,6 +137,24 @@ struct AppMenuButton: View {
     }
 
     var body: some View {
+        HStack(spacing: 16) {
+            menu
+            if configurationLoader.appConfiguration.assistant != nil {
+                Button {
+                    router.presentedSheet = .assistant
+                } label: {
+                    Image(systemName: assistant.directive?.status == .running ? "waveform" : "mic.fill")
+                }
+                .accessibilityLabel(assistant.directive?.status == .running ? "Assistant directive in progress" : "Record a directive")
+                .accessibilityIdentifier("assistant.open")
+            }
+        }
+        .sheet(item: $addingShortcut) { adding in
+            AddPageShortcutSheet(page: adding.page, existing: adding.existing)
+        }
+    }
+
+    private var menu: some View {
         Menu {
             if let page {
                 Button {
@@ -158,9 +178,6 @@ struct AppMenuButton: View {
             Image(systemName: "line.3.horizontal")
         }
         .accessibilityLabel("Menu")
-        .sheet(item: $addingShortcut) { adding in
-            AddPageShortcutSheet(page: adding.page, existing: adding.existing)
-        }
     }
 }
 

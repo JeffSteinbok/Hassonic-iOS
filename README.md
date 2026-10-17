@@ -193,6 +193,9 @@ To check a file before Home Assistant serves it:
 scripts/validate_config.sh hassonic.yaml
 ```
 
+The optional Assistant adds a microphone beside the menu on every page: hold to
+record a directive, review and send it, then follow its progress and result.
+
 More: [Spotify and Alexa](docs/SPOTIFY_AND_ALEXA.md) ·
 [Assistant and device pairing](docs/assistant.md) ·
 [Live Activity](docs/live-activity.md) ·

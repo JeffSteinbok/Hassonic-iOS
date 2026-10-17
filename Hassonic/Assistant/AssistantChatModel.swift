@@ -1,6 +1,17 @@
 import Foundation
 import Combine
 
+/// One directive and its outcome, rather than a conversation to render.
+struct AssistantDirective: Identifiable, Equatable {
+    enum Status: Equatable { case running, completed, cancelled, failed, interrupted }
+    let id: String
+    let text: String
+    var runID: String
+    var status: Status = .running
+    var progress = "Sending your directive…"
+    var response = ""
+}
+
 struct AssistantMessage: Identifiable, Equatable {
     let id: String
     let isUser: Bool
@@ -70,7 +81,7 @@ final class AssistantChatModel: ObservableObject {
     @Published private(set) var gatewayHost: String?
     @Published private(set) var deviceID: String?
     @Published private(set) var activeRunID: String?
-    @Published private(set) var isLoadingHistory = false
+    @Published private(set) var directive: AssistantDirective?
     private let store: any OpenClawCredentialStoring
     private let gateway: OpenClawGatewayClient
     private var configuration: AssistantConfiguration?
@@ -78,8 +89,9 @@ final class AssistantChatModel: ObservableObject {
     private var connectionTask: Task<Void, Never>?
     private var sendTask: Task<Void, Never>?
     private var generation = UUID()
-    private var bufferedEvents: [[String: Any]] = []
     private var demo = false
+    private var awaitingAcknowledgement = false
+    private var earlyEvents: [[String: Any]] = []
 
     init(store: (any OpenClawCredentialStoring)? = nil, gateway: OpenClawGatewayClient? = nil) {
         self.store = store ?? OpenClawCredentialStore()
@@ -91,17 +103,12 @@ final class AssistantChatModel: ObservableObject {
         if self.configuration != configuration || self.demo != demo {
             pause()
             transcript = AssistantTranscript()
+            directive = nil
             self.configuration = configuration
             self.demo = demo
         }
         if demo {
             state = .connected
-            if transcript.messages.isEmpty {
-                transcript.messages = [
-                    AssistantMessage(id: "demo:user", isUser: true, text: "What's the temperature downstairs?"),
-                    AssistantMessage(id: "demo:assistant", isUser: false, text: "It's 71°F downstairs.")
-                ]
-            }
             return
         }
         guard connectionTask == nil else { return }
@@ -119,10 +126,10 @@ final class AssistantChatModel: ObservableObject {
         sendTask?.cancel()
         sendTask = nil
         gateway.disconnect()
-        isLoadingHistory = false
-        bufferedEvents = []
+        awaitingAcknowledgement = false
+        earlyEvents = []
         if activeRunID != nil {
-            errorMessage = "The connection was interrupted. Check the conversation before sending the command again."
+            markInterrupted()
         }
         activeRunID = nil
         if state != .needsPairing { state = .disconnected }
@@ -146,6 +153,7 @@ final class AssistantChatModel: ObservableObject {
             gatewayHost = nil
             deviceID = nil
             transcript = AssistantTranscript()
+            directive = nil
             errorMessage = nil
             state = .needsPairing
         } catch { errorMessage = OpenClawError.keychain.localizedDescription }
@@ -159,29 +167,43 @@ final class AssistantChatModel: ObservableObject {
 
     func send(_ input: String) {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard state == .connected, !isLoadingHistory, activeRunID == nil,
+        guard state == .connected, activeRunID == nil,
               !text.isEmpty, text.count <= 16_000, let configuration else { return }
         errorMessage = nil
         let runID = UUID().uuidString
+        transcript = AssistantTranscript()
+        directive = AssistantDirective(id: runID, text: text, runID: runID)
         transcript.messages.append(AssistantMessage(id: "user:\(runID)", isUser: true, text: text))
         if demo {
-            transcript.messages.append(AssistantMessage(id: "assistant:\(runID)", isUser: false, text: "This is a demo conversation. No command was sent."))
+            directive?.status = .completed
+            directive?.progress = "Done"
+            directive?.response = "This is a preview. No directive was sent to your home."
             return
         }
         activeRunID = runID
+        awaitingAcknowledgement = true
+        earlyEvents = []
         let id = generation
         sendTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let result = try await gateway.send(text, idempotencyKey: runID, configuration: configuration)
                 guard generation == id, !Task.isCancelled else { return }
-                if activeRunID == runID, let actualRun = result["runId"] as? String {
-                    activeRunID = transcript.finishedRuns.contains(actualRun) ? nil : actualRun
+                awaitingAcknowledgement = false
+                if let actualRun = result["runId"] as? String {
+                    directive?.runID = actualRun
+                    if directive?.status == .running { activeRunID = actualRun }
                 }
+                if directive?.status == .running { directive?.progress = "OpenClaw is working on it…" }
+                let events = earlyEvents
+                earlyEvents = []
+                for event in events { receive(event) }
             } catch {
                 guard generation == id, !Task.isCancelled else { return }
+                awaitingAcknowledgement = false
+                earlyEvents = []
                 activeRunID = nil
-                errorMessage = "Couldn't confirm whether the command was accepted. Reconnect and check the conversation before resending."
+                markInterrupted()
             }
         }
     }
@@ -192,11 +214,30 @@ final class AssistantChatModel: ObservableObject {
         do {
             try await gateway.abort(runID: activeRunID, configuration: configuration)
             guard generation == id else { return }
-            if self.activeRunID == activeRunID { self.activeRunID = nil }
+            if self.activeRunID == activeRunID {
+                self.activeRunID = nil
+                directive?.status = .cancelled
+                directive?.progress = "Stopped"
+                directive?.response = "Cancellation was requested. Actions that already finished cannot be undone."
+            }
         } catch {
             guard generation == id else { return }
-            errorMessage = "Couldn't confirm cancellation. The command may still be running."
+            errorMessage = "Couldn't confirm cancellation. The directive may still be running."
         }
+    }
+
+    func clearDirective() {
+        guard directive?.status != .running else { return }
+        directive = nil
+        transcript = AssistantTranscript()
+        errorMessage = nil
+        earlyEvents = []
+    }
+
+    private func markInterrupted() {
+        directive?.status = .interrupted
+        directive?.progress = "Status unavailable"
+        errorMessage = "The connection was interrupted. Your directive may still be running; it has not been sent again."
     }
 
     private func connectionLoop(_ configuration: AssistantConfiguration, generation id: UUID) async {
@@ -233,23 +274,14 @@ final class AssistantChatModel: ObservableObject {
                 }
                 state = .connected
                 attempts = 0
-                isLoadingHistory = true
-                bufferedEvents = []
-                let history = try await gateway.history(configuration: configuration)
-                guard generation == id, !Task.isCancelled else { return }
-                transcript.replaceHistory(history)
-                isLoadingHistory = false
-                let events = bufferedEvents
-                bufferedEvents = []
-                for event in events { receive(event) }
+                // No conversation history is fetched or rendered. Only this device's
+                // current directive may update the progress/result screen.
                 try await gateway.waitForDisconnect()
             } catch {
                 guard generation == id, !Task.isCancelled else { return }
                 gateway.disconnect()
-                isLoadingHistory = false
-                bufferedEvents = []
                 if activeRunID != nil {
-                    errorMessage = "The connection was interrupted. Check the conversation before sending the command again."
+                    markInterrupted()
                     activeRunID = nil
                 }
                 let failure = error as? OpenClawError
@@ -274,19 +306,44 @@ final class AssistantChatModel: ObservableObject {
     private func receive(_ event: [String: Any]) {
         guard let configuration, event["sessionKey"] as? String == configuration.sessionKey,
               (event["agentId"] as? String).map({ $0 == configuration.agent }) ?? true else { return }
-        if isLoadingHistory {
-            // A bounded queue while the initial history RPC is in flight.
-            if bufferedEvents.count < 1000 { bufferedEvents.append(event) }
+        guard let current = directive, let runID = event["runId"] as? String,
+              current.status == .running || current.status == .interrupted else { return }
+        guard runID == current.runID else {
+            // The gateway may assign a different run ID, with events arriving before
+            // chat.send's acknowledgement. Replay only matching events after the ack.
+            if awaitingAcknowledgement, earlyEvents.count < 100 { earlyEvents.append(event) }
+            return
+        }
+        if event["state"] as? String == "status" {
+            errorMessage = nil
+            activeRunID = runID
+            directive?.status = .running
+            directive?.progress = "OpenClaw is working on it…"
             return
         }
         guard transcript.apply(event) else { return }
-        let runID = event["runId"] as? String
+        errorMessage = nil
+        directive?.response = transcript.messages.last(where: { !$0.isUser })?.text ?? ""
         switch event["state"] as? String {
         case "delta":
-            if activeRunID == nil { activeRunID = runID }
-        case "final", "aborted", "error":
-            if activeRunID == runID { activeRunID = nil }
-            if event["state"] as? String == "error" { errorMessage = "The assistant couldn't finish that request. Check the conversation before trying again." }
+            activeRunID = runID
+            directive?.status = .running
+            directive?.progress = "Working on your directive…"
+        case "final":
+            activeRunID = nil
+            directive?.status = .completed
+            directive?.progress = "Done"
+            if directive?.response.isEmpty == true { directive?.response = "Your directive has finished." }
+        case "aborted":
+            activeRunID = nil
+            directive?.status = .cancelled
+            directive?.progress = "Stopped"
+            if directive?.response.isEmpty == true { directive?.response = "The directive was stopped. Actions that already finished cannot be undone." }
+        case "error":
+            activeRunID = nil
+            directive?.status = .failed
+            directive?.progress = "Couldn't finish"
+            errorMessage = "OpenClaw couldn't finish this directive. Any actions already completed may still have taken effect."
         default: break
         }
     }

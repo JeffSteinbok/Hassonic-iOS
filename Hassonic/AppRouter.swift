@@ -3,7 +3,6 @@ import SwiftUI
 enum AppTab: Hashable {
     case connection
     case music
-    case assistant
     case dashboard(String)
 
     /// An iPhone tab bar shows five tabs; past that, the fifth slot becomes
@@ -24,6 +23,7 @@ enum AppDestination: Hashable {
 enum AppSheet: String, Identifiable {
     case settings
     case about
+    case assistant
 
     var id: String { rawValue }
 }
@@ -45,7 +45,7 @@ final class AppRouter: ObservableObject {
 
     func setAssistantEnabled(_ enabled: Bool) {
         assistantEnabled = enabled
-        if !enabled, selectedTab == .assistant { selectedTab = .music }
+        if !enabled, presentedSheet == .assistant { presentedSheet = nil }
     }
 
     /// Where the last tab picked is kept, so a relaunch or a reconnect lands
@@ -104,8 +104,6 @@ final class AppRouter: ObservableObject {
             return
         case .music:
             lastTabStore.set("music", forKey: Self.lastTabKey)
-        case .assistant:
-            lastTabStore.set("assistant", forKey: Self.lastTabKey)
         case .dashboard(let pageID):
             lastTabStore.set("dashboard:\(pageID)", forKey: Self.lastTabKey)
         }
@@ -114,7 +112,7 @@ final class AppRouter: ObservableObject {
     private func rememberedTab() -> AppTab? {
         guard let stored = lastTabStore?.string(forKey: Self.lastTabKey) else { return nil }
         if stored == "music" { return .music }
-        if stored == "assistant" { return .assistant }
+        if stored == "assistant" { return .music }
         if stored.hasPrefix("dashboard:") { return .dashboard(String(stored.dropFirst("dashboard:".count))) }
         return nil
     }
@@ -123,7 +121,6 @@ final class AppRouter: ObservableObject {
         switch tab {
         case .connection: return false
         case .music: return true
-        case .assistant: return assistantEnabled
         case .dashboard(let pageID): return pages.contains { $0.id == pageID }
         }
     }
@@ -137,7 +134,7 @@ final class AppRouter: ObservableObject {
 
         switch (host, subpath) {
         case ("assistant", _) where assistantEnabled:
-            navigate(to: .tab(.assistant))
+            presentedSheet = .assistant
         case ("music", "playon"):
             navigate(to: .musicPlayOn)
         case ("music", _):
