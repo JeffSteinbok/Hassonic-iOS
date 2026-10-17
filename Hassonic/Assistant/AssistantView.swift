@@ -41,7 +41,7 @@ struct AssistantView: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.height(320), .large])
         .presentationDragIndicator(.visible)
         .task(id: configuration) {
             var demo = false
@@ -79,7 +79,7 @@ struct AssistantView: View {
                 if isStarting || model.state == .connecting || model.state == .waitingForApproval {
                     ProgressView()
                 } else {
-                    Image(systemName: voice.state == .listening ? "waveform" : "mic.slash")
+                    Image(systemName: voice.state == .listening ? "waveform" : voice.state == .idle ? "mic.fill" : "mic.slash")
                         .foregroundStyle(.tint).font(.title2)
                 }
                 Text(captureStatus).font(.title2.bold()).accessibilityIdentifier("assistant.status")
