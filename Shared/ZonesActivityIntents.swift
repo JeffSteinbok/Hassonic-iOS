@@ -73,3 +73,26 @@ struct TogglePlaybackIntent: LiveActivityIntent {
         return .result()
     }
 }
+
+struct PressPinnedPageKeyIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Press Remote Key"
+    static let isDiscoverable = false
+
+    @Parameter(title: "Activity") var activityId: String
+    @Parameter(title: "Key") var keyId: String
+
+    init() {}
+
+    init(activityId: String, keyId: String) {
+        self.activityId = activityId
+        self.keyId = keyId
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+#if !WIDGET_EXTENSION
+        await PinnedPageActivityController.shared.press(keyId, activityId: activityId)
+#endif
+        return .result()
+    }
+}

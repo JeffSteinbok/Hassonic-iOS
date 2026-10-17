@@ -5,5 +5,6 @@ import WidgetKit
 struct HassonicWidgetsBundle: WidgetBundle {
     var body: some Widget {
         ZonesLiveActivity()
+        PinnedPageLiveActivity()
     }
 }
