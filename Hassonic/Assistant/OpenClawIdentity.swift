@@ -133,6 +133,9 @@ struct OpenClawCredential: Codable, Equatable {
     let scopes: [String]
 
     static let chatScopes = ["operator.read", "operator.write"]
+    // OpenClaw propagates these scopes to the run. Its plugin approval
+    // request/wait methods require approvals even when review goes to Discord.
+    static let connectionScopes = chatScopes + ["operator.approvals"]
 
     func validated() throws -> Self {
         _ = try OpenClawSetupCode.validatedURL(gatewayURL)

@@ -59,10 +59,15 @@ shared gateway token or the temporary node credential.
 OpenClaw's mobile setup protocol initially connects as a node with no
 capabilities, commands or requested scopes, then hands over an operator
 credential. Hassonic closes that connection and reconnects as an operator
-requesting only `operator.read` and `operator.write`. It rejects administrator
-or pairing credentials. The limited bootstrap credential may still carry
-additional OpenClaw scopes such as approvals and Talk secrets; requesting
+requesting `operator.read`, `operator.write` and `operator.approvals`. The
+approval scope is needed by the admitted run to request and wait for plugin
+approvals, even when the gateway delivers review to Discord. Hassonic does not
+automatically approve requests or add administrator/pairing access. It rejects
+administrator or pairing credentials. The limited bootstrap credential may still carry
+additional OpenClaw scopes such as Questions and Talk secrets; requesting
 fewer scopes on a connection does not remove authority from the credential.
+The approvals scope also permits approval management if the credential is
+used outside this app; this remains a trusted-household-device boundary.
 
 ## Permission boundary
 

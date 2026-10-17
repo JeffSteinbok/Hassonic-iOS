@@ -203,7 +203,11 @@ final class OpenClawGatewayTests: XCTestCase {
         _ = try await client.history(configuration: AssistantConfiguration())
         let connect = socket.sent[0]["params"] as! [String: Any]
         XCTAssertEqual(connect["role"] as? String, "operator")
-        XCTAssertEqual(connect["scopes"] as? [String], OpenClawCredential.chatScopes)
+        XCTAssertEqual(connect["scopes"] as? [String], OpenClawCredential.connectionScopes)
+        XCTAssertTrue((connect["scopes"] as? [String])?.contains("operator.approvals") == true,
+                      "The admitted run needs approvals scope to request and wait for plugin approvals.")
+        XCTAssertFalse((connect["scopes"] as? [String])?.contains("operator.admin") == true)
+        XCTAssertFalse((connect["scopes"] as? [String])?.contains("operator.pairing") == true)
         XCTAssertNotNil((connect["device"] as? [String: Any])?["signature"])
         let history = socket.sent[1]["params"] as! [String: Any]
         XCTAssertEqual(history["sessionKey"] as? String, "agent:hassonic:main")

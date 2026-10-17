@@ -102,7 +102,7 @@ final class OpenClawGatewayClient {
             guard generation == id, let nonce = challenge["nonce"] as? String, !nonce.isEmpty,
                   let timestamp = challenge["ts"] as? NSNumber else { throw OpenClawError.invalidResponse }
             let role = bootstrap ? "node" : "operator"
-            let scopes = bootstrap ? [] : OpenClawCredential.chatScopes
+            let scopes = bootstrap ? [] : OpenClawCredential.connectionScopes
             let hello = try await request("connect", params: [
                 "minProtocol": 4, "maxProtocol": 4,
                 "client": ["id": "openclaw-ios", "displayName": "Hassonic", "version": "1.0",
