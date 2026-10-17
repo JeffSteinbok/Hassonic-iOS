@@ -12,17 +12,20 @@ final class AssistantConfigurationTests: XCTestCase {
         sections: []
     """
 
-    func testOptionalAssistantAndConfigurableRouting() throws {
+    func testOptionalAssistantAlwaysUsesHassonicWithConfigurableSession() throws {
         XCTAssertNil(try AppConfigurationParser.parse(minimal).assistant)
-        let config = try AppConfigurationParser.parse(minimal + "\nassistant:\n  agent: family\n")
-        XCTAssertEqual(config.assistant, AssistantConfiguration(agent: "family"))
-        XCTAssertEqual(config.assistant?.sessionKey, "agent:family:main")
-        let other = try AppConfigurationParser.parse(minimal + "\nassistant:\n  agent: helper\n  session: phone\n")
-        XCTAssertEqual(other.assistant?.sessionKey, "agent:helper:phone")
+        let config = try AppConfigurationParser.parse(minimal + "\nassistant: {}\n")
+        XCTAssertEqual(config.assistant, AssistantConfiguration())
+        XCTAssertEqual(config.assistant?.sessionKey, "agent:hassonic:main")
+        for legacyAgent in ["family", "main", "helper", "hassonic"] {
+            let other = try AppConfigurationParser.parse(minimal + "\nassistant:\n  agent: \(legacyAgent)\n  session: phone\n")
+            XCTAssertEqual(other.assistant?.agent, "hassonic")
+            XCTAssertEqual(other.assistant?.sessionKey, "agent:hassonic:phone")
+        }
     }
 
-    func testInvalidAgentSessionAndReservedPageAreRejected() {
-        for block in ["agent: ''", "agent: Family", "agent: 'family:main'", "agent: family\n  session: 'other:session'", "agent: family\n  title: ''"] {
+    func testInvalidSessionAndReservedPageAreRejected() {
+        for block in ["session: ''", "session: Main", "session: 'other:session'", "title: ''"] {
             XCTAssertThrowsError(try AppConfigurationParser.parse(minimal + "\nassistant:\n  " + block + "\n"))
         }
         XCTAssertThrowsError(try AppConfigurationParser.parse(minimal.replacingOccurrences(of: "id: home", with: "id: assistant") + "\nassistant:\n  agent: family\n"))
@@ -123,11 +126,11 @@ final class AssistantRoutingTests: XCTestCase {
         XCTAssertEqual(router.selectedTab, .music)
     }
 
-    func testAllChatRPCsUseConfiguredAgentAndSession() {
-        let config = AssistantConfiguration(agent: "future-agent", session: "phone")
+    func testAllChatRPCsPinHassonicEvenWhenExtrasTryToOverrideIt() {
+        let config = AssistantConfiguration(session: "phone")
         let params = OpenClawGatewayClient.chatParams(config, extra: ["agentId": "evil", "sessionKey": "agent:main:main"])
-        XCTAssertEqual(params["agentId"] as? String, "future-agent")
-        XCTAssertEqual(params["sessionKey"] as? String, "agent:future-agent:phone")
+        XCTAssertEqual(params["agentId"] as? String, "hassonic")
+        XCTAssertEqual(params["sessionKey"] as? String, "agent:hassonic:phone")
     }
 
     func testNotificationURLAcceptsOnlyAppLinks() {
@@ -196,13 +199,20 @@ final class OpenClawGatewayTests: XCTestCase {
         let client = OpenClawGatewayClient(makeSocket: { _ in socket })
         defer { client.disconnect() }
         _ = try await client.connect(url: URL(string: "wss://gateway.example")!, identity: OpenClawIdentity(), token: "test-token", bootstrap: false)
-        _ = try await client.history(configuration: AssistantConfiguration(agent: "family"))
+        _ = try await client.history(configuration: AssistantConfiguration())
         let connect = socket.sent[0]["params"] as! [String: Any]
         XCTAssertEqual(connect["role"] as? String, "operator")
         XCTAssertEqual(connect["scopes"] as? [String], OpenClawCredential.chatScopes)
         XCTAssertNotNil((connect["device"] as? [String: Any])?["signature"])
         let history = socket.sent[1]["params"] as! [String: Any]
-        XCTAssertEqual(history["sessionKey"] as? String, "agent:family:main")
+        XCTAssertEqual(history["sessionKey"] as? String, "agent:hassonic:main")
+        _ = try await client.send("hello", idempotencyKey: "test-run", configuration: AssistantConfiguration())
+        try await client.abort(runID: "test-run", configuration: AssistantConfiguration())
+        for request in socket.sent.dropFirst() {
+            let params = request["params"] as! [String: Any]
+            XCTAssertEqual(params["agentId"] as? String, "hassonic")
+            XCTAssertEqual(params["sessionKey"] as? String, "agent:hassonic:main")
+        }
     }
 
     func testTimeoutAndDisconnectSettleOutstandingRequests() async throws {
@@ -212,10 +222,10 @@ final class OpenClawGatewayTests: XCTestCase {
         _ = try await client.connect(url: URL(string: "wss://gateway.example")!, identity: OpenClawIdentity(), token: "test-token", bootstrap: false)
         socket.onSend = nil
         do {
-            _ = try await client.history(configuration: AssistantConfiguration(agent: "family"))
+            _ = try await client.history(configuration: AssistantConfiguration())
             XCTFail("The RPC should time out")
         } catch { XCTAssertEqual(error as? OpenClawError, .timeout) }
-        let request = Task { try await client.history(configuration: AssistantConfiguration(agent: "family")) }
+        let request = Task { try await client.history(configuration: AssistantConfiguration()) }
         await Task.yield()
         client.disconnect()
         do { _ = try await request.value; XCTFail("Disconnect should fail outstanding work") }
@@ -249,13 +259,35 @@ final class FakeOpenClawStore: OpenClawCredentialStoring {
 
 @MainActor
 final class AssistantLifecycleTests: XCTestCase {
+    func testEventsFromOtherAgentsAreIgnored() async throws {
+        let socket = FakeOpenClawSocket()
+        socket.respondToChat()
+        let model = AssistantChatModel(store: FakeOpenClawStore(), gateway: OpenClawGatewayClient(makeSocket: { _ in socket }))
+        defer { model.pause() }
+        model.activate(configuration: AssistantConfiguration())
+        for _ in 0..<200 where model.state != .connected || model.isLoadingHistory { await Task.yield() }
+        XCTAssertEqual(model.state, .connected)
+        for (run, session, agent, text) in [
+            ("other-session", "agent:family:main", "family", "Wrong session"),
+            ("other-agent", "agent:hassonic:main", "family", "Wrong agent"),
+            ("allowed", "agent:hassonic:main", "hassonic", "Allowed")
+        ] {
+            socket.emit(["type": "event", "event": "chat", "payload": [
+                "runId": run, "sessionKey": session, "agentId": agent, "seq": 1,
+                "state": "final", "message": ["content": text]
+            ]])
+        }
+        for _ in 0..<200 where model.transcript.messages.isEmpty { await Task.yield() }
+        XCTAssertEqual(model.transcript.messages.map(\.text), ["Allowed"])
+    }
+
     func testConstructionAndDemoDoNotReadKeychainOrConnect() {
         let store = FakeOpenClawStore()
         var connections = 0
         let gateway = OpenClawGatewayClient(makeSocket: { _ in connections += 1; return FakeOpenClawSocket() })
         let model = AssistantChatModel(store: store, gateway: gateway)
         XCTAssertEqual(store.reads, 0)
-        model.activate(configuration: AssistantConfiguration(agent: "family"), demo: true)
+        model.activate(configuration: AssistantConfiguration(), demo: true)
         XCTAssertEqual(store.reads, 0)
         XCTAssertEqual(connections, 0)
         XCTAssertEqual(model.transcript.messages.count, 2)
@@ -269,7 +301,7 @@ final class AssistantLifecycleTests: XCTestCase {
         var connections = 0
         let gateway = OpenClawGatewayClient(makeSocket: { _ in connections += 1; return socket })
         let model = AssistantChatModel(store: store, gateway: gateway)
-        model.activate(configuration: AssistantConfiguration(agent: "family"))
+        model.activate(configuration: AssistantConfiguration())
         for _ in 0..<200 where model.state != .connected || model.isLoadingHistory { await Task.yield() }
         XCTAssertEqual(model.state, .connected)
         model.pause()

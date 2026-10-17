@@ -158,7 +158,7 @@ final class OpenClawGatewayClient {
         var params = extra
         // These cannot be overridden by a composer, event or caller-provided extras.
         params["sessionKey"] = configuration.sessionKey
-        params["agentId"] = configuration.agent
+        params["agentId"] = AssistantConfiguration.agentID
         return params
     }
 

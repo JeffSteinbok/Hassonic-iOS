@@ -425,11 +425,11 @@ are paired on each device and never belong in this file:
 
 ```yaml
 assistant:
-  agent: family
   session: main
   title: Assistant
   system_icon: sparkles
 ```
 
-The agent is configurable; `session`, `title` and `system_icon` have the defaults
-shown above. See [Assistant setup](assistant.md) for pairing and permissions.
+The app always uses the `hassonic` agent; YAML cannot override it. Legacy `agent`
+keys are ignored. `session`, `title` and `system_icon` have the defaults shown
+above. See [Assistant setup](assistant.md) for pairing and permissions.

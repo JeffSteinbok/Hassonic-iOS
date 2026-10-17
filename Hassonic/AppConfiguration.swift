@@ -61,22 +61,22 @@ struct AppConfiguration: Decodable, Equatable {
     }
 }
 
-/// Only routing and presentation belong in YAML. Pairing material stays in Keychain.
+/// YAML controls the session and presentation. The agent is pinned in code.
 struct AssistantConfiguration: Decodable, Equatable {
+    static let agentID = "hassonic"
     var title: String = "Assistant"
     var systemIcon: String = "sparkles"
-    let agent: String
+    var agent: String { Self.agentID }
     var session: String = "main"
 
     var sessionKey: String { "agent:\(agent):\(session)" }
 
     enum CodingKeys: String, CodingKey {
-        case title, agent, session
+        case title, session
         case systemIcon = "system_icon"
     }
 
-    init(agent: String, session: String = "main", title: String = "Assistant", systemIcon: String = "sparkles") {
-        self.agent = agent
+    init(session: String = "main", title: String = "Assistant", systemIcon: String = "sparkles") {
         self.session = session
         self.title = title
         self.systemIcon = systemIcon
@@ -84,17 +84,15 @@ struct AssistantConfiguration: Decodable, Equatable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        agent = try c.decode(String.self, forKey: .agent)
+        // Ignore legacy `agent` keys, including cached configs that selected family.
         session = try c.decodeIfPresent(String.self, forKey: .session) ?? "main"
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? "Assistant"
         systemIcon = try c.decodeIfPresent(String.self, forKey: .systemIcon) ?? "sparkles"
     }
 
     func validate() throws {
-        for (name, value) in [("agent", agent), ("session", session)] {
-            guard value.range(of: #"^[a-z0-9][a-z0-9_-]{0,63}$"#, options: .regularExpression) != nil else {
-                throw ValidationError("assistant.\(name) must be 1–64 lowercase letters, digits, underscores or hyphens, starting with a letter or digit.")
-            }
+        guard session.range(of: #"^[a-z0-9][a-z0-9_-]{0,63}$"#, options: .regularExpression) != nil else {
+            throw ValidationError("assistant.session must be 1–64 lowercase letters, digits, underscores or hyphens, starting with a letter or digit.")
         }
         guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !systemIcon.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {

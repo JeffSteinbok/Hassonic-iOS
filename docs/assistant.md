@@ -1,19 +1,20 @@
 # Assistant
 
-Hassonic can chat with an agent on your OpenClaw gateway. Enable the tab in
+Hassonic chats only with the `hassonic` agent on your OpenClaw gateway. Enable the tab in
 your Home Assistant-hosted YAML:
 
 ```yaml
 assistant:
   title: Assistant
   system_icon: sparkles
-  agent: family
   session: main
 ```
 
-Change `agent` or `session` later to use another conversation. Both accept
-1–64 lowercase letters, digits, underscores and hyphens, starting with a
-letter or digit. Without this block there is no Assistant tab, no gateway
+The agent is fixed to `hassonic` in app code. Legacy `assistant.agent` values
+are ignored, including in cached configurations. `session` can select another
+conversation within that agent and accepts 1–64 lowercase letters, digits,
+underscores and hyphens, starting with a letter or digit.
+Without this block there is no Assistant tab, no gateway
 connection and no Assistant Keychain access. `assistant` becomes a reserved
 page ID while the tab is enabled.
 
@@ -59,7 +60,7 @@ fewer scopes on a connection does not remove authority from the credential.
 
 ## Permission boundary
 
-The configured agent/session is an application routing choice, not a server
+The pinned agent and configured session are application routing choices, not a server
 authorization boundary. A device credential with broad operator read/write
 authority may access other agents or gateway operations if used outside
 Hassonic. This implementation is for trusted household devices on one trusted
@@ -118,7 +119,7 @@ separate gateway/plugin feature; this app does not install it.
 For an opt-in physical-device integration test, copy a fresh limited setup code
 to the Dev app's `Documents/openclaw-assistant-setup-code.txt`, then run
 `AssistantDeviceIntegrationTests/testLiveDevicePairingAndChat` on that device.
-The test consumes the setup file, uses the household's configured agent/session,
+The test consumes the setup file, uses the `hassonic` agent and configured session,
 sends a harmless connectivity request and leaves the issued credential in
 Keychain for normal use. Without that file it skips and makes no connection.
 
