@@ -74,12 +74,37 @@ struct DashboardPageView: View {
             ToolbarItem(placement: isInMoreTab || isPushed ? .topBarTrailing : .topBarLeading) {
                 AppMenuButton(page: AppPage(id: page.id, title: page.title, systemIcon: page.systemIcon))
             }
+            // A remote is what you want back in a hurry, mid-show.
+            if fitsScreen {
+                ToolbarItem(placement: .topBarTrailing) {
+                    PinToLockScreenButton(page: page)
+                }
+            }
         }
         .navigationDestination(for: String.self) { roomID in
             if let room = rooms.first(where: { $0.id == roomID }) {
                 DashboardPageView(page: room, isPushed: true)
             }
         }
+    }
+}
+
+/// Pins the page to the Lock Screen as a Live Activity that opens it.
+private struct PinToLockScreenButton: View {
+    let page: DashboardPageConfiguration
+
+    @ObservedObject private var pinned = PinnedPageActivityController.shared
+
+    var body: some View {
+        let isPinned = pinned.isPinned(page.id)
+        Button {
+            pinned.toggle(page)
+        } label: {
+            Image(systemName: isPinned ? "pin.fill" : "pin")
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .disabled(!isPinned && !pinned.areActivitiesEnabled)
+        .accessibilityLabel(isPinned ? "Remove from Lock Screen" : "Keep on Lock Screen")
     }
 }
 

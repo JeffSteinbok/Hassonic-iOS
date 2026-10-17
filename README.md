@@ -193,7 +193,11 @@ To check a file before Home Assistant serves it:
 scripts/validate_config.sh hassonic.yaml
 ```
 
+The optional Assistant adds a microphone beside the menu on every page: tap to
+speak a directive, then follow its progress and result. It sends when you finish speaking.
+
 More: [Spotify and Alexa](docs/SPOTIFY_AND_ALEXA.md) ·
+[Assistant and device pairing](docs/assistant.md) ·
 [Live Activity](docs/live-activity.md) ·
 [Push notifications](docs/push-notification-setup.md)
 

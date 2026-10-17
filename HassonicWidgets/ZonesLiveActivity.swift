@@ -137,7 +137,7 @@ private struct PlayPauseButton: View {
 
 /// The app's icon as the user picked it, so the activity reads as this app at
 /// a glance. Falls back to the default mark if this build lacks the asset.
-private struct AppMark: View {
+struct AppMark: View {
     let name: String?
     let size: CGFloat
 

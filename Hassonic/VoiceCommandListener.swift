@@ -6,6 +6,7 @@ import Speech
 /// tap again). Recognition stays on the iPhone when the language allows it.
 @MainActor
 final class VoiceCommandListener: ObservableObject {
+    enum Mode { case phrase, hold }
     enum State: Equatable {
         case idle
         case listening
@@ -18,6 +19,7 @@ final class VoiceCommandListener: ObservableObject {
     @Published private(set) var state: State = .idle
     /// What's been heard so far, while listening.
     @Published private(set) var transcript = ""
+    @Published private(set) var isFinishing = false
 
     /// How long a pause ends the command, once something's been said.
     private static let pauseThatEnds: Duration = .seconds(1.2)
@@ -33,16 +35,27 @@ final class VoiceCommandListener: ObservableObject {
     /// Set while asking for permission, before `state` says listening, so a
     /// second tap can't start a second microphone tap (which traps).
     private var isStarting = false
+    private var startGeneration = UUID()
+    private var mode: Mode = .phrase
+    private var tapInstalled = false
+    private let authorization: () async -> Bool
+
+    init(authorize: (() async -> Bool)? = nil) {
+        authorization = authorize ?? { await Self.authorize() }
+    }
 
     /// Starts listening; `onCommand` gets the words once they're finished.
     /// Nothing is handed back if nothing was said.
-    func start(onCommand: @escaping (String) -> Void) async {
-        guard state != .listening, !isStarting else { return }
+    func start(mode: Mode = .phrase, onCommand: @escaping (String) -> Void) async {
+        guard state != .listening, !isStarting, !Task.isCancelled else { return }
         isStarting = true
-        let authorized = await Self.authorize()
+        let generation = UUID()
+        startGeneration = generation
+        let authorized = await authorization()
         // cancel() while asking: the view's gone, so don't open the mic.
-        guard isStarting else { return }
+        guard isStarting, startGeneration == generation else { return }
         isStarting = false
+        guard !Task.isCancelled else { return }
         guard authorized else {
             state = .denied
             return
@@ -68,6 +81,7 @@ final class VoiceCommandListener: ObservableObject {
             input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { [request] buffer, _ in
                 request.append(buffer)
             }
+            tapInstalled = true
             audioEngine.prepare()
             try audioEngine.start()
         } catch {
@@ -78,6 +92,7 @@ final class VoiceCommandListener: ObservableObject {
         }
 
         self.request = request
+        self.mode = mode
         self.onCommand = onCommand
         transcript = ""
         state = .listening
@@ -88,20 +103,41 @@ final class VoiceCommandListener: ObservableObject {
                 // A cancelled session still reports in; it mustn't end the next one.
                 guard let self, self.request === request else { return }
                 if let words { self.heard(words) }
-                if isFinal || error != nil { self.finish() }
+                if isFinal || error != nil {
+                    let failedWithoutSpeech = error != nil && self.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    self.finish()
+                    if failedWithoutSpeech { self.state = .unavailable }
+                }
             }
         }
-        endAfter(Self.waitForSpeech)
+        // Hold mode records through pauses; a safety cap prevents an indefinitely open mic.
+        endAfter(mode == .hold ? .seconds(60) : Self.waitForSpeech)
     }
 
     /// Ends listening now and hands back whatever was heard.
     func stop() {
+        isStarting = false
+        startGeneration = UUID()
+        if state == .listening, mode == .hold {
+            guard !isFinishing else { return }
+            isFinishing = true
+            if audioEngine.isRunning { audioEngine.stop() }
+            if tapInstalled {
+                audioEngine.inputNode.removeTap(onBus: 0)
+                tapInstalled = false
+            }
+            request?.endAudio()
+            // Allow the recognizer's final words to arrive after release.
+            endAfter(.milliseconds(500))
+            return
+        }
         finish()
     }
 
     /// Ends listening and drops what was heard.
     func cancel() {
         isStarting = false
+        startGeneration = UUID()
         onCommand = nil
         finish()
     }
@@ -114,7 +150,7 @@ final class VoiceCommandListener: ObservableObject {
     private func heard(_ words: String) {
         guard state == .listening else { return }
         transcript = words
-        endAfter(Self.pauseThatEnds)
+        if mode == .phrase { endAfter(Self.pauseThatEnds) }
     }
 
     private func endAfter(_ delay: Duration) {
@@ -137,6 +173,7 @@ final class VoiceCommandListener: ObservableObject {
     }
 
     private func tearDown() {
+        isFinishing = false
         timeout?.cancel()
         timeout = nil
         task?.cancel()
@@ -145,7 +182,10 @@ final class VoiceCommandListener: ObservableObject {
         request = nil
         onCommand = nil
         if audioEngine.isRunning { audioEngine.stop() }
-        audioEngine.inputNode.removeTap(onBus: 0)
+        if tapInstalled {
+            audioEngine.inputNode.removeTap(onBus: 0)
+            tapInstalled = false
+        }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
