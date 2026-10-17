@@ -15,9 +15,10 @@ struct AppConfiguration: Decodable, Equatable {
     /// Absent when nothing in the house can claim a speaker for an account —
     /// a single-account household needs none of it.
     let speakerClaim: SpeakerClaimConfig?
+    let assistant: AssistantConfiguration?
 
     private enum CodingKeys: String, CodingKey {
-        case version, pages, media, speakerClaim
+        case version, pages, media, speakerClaim, assistant
     }
 
     init(from decoder: Decoder) throws {
@@ -28,18 +29,21 @@ struct AppConfiguration: Decodable, Equatable {
         // music tab at all — so an absent media block is empty, not an error.
         media = try c.decodeIfPresent(MediaConfiguration.self, forKey: .media) ?? MediaConfiguration()
         speakerClaim = try c.decodeIfPresent(SpeakerClaimConfig.self, forKey: .speakerClaim)
+        assistant = try c.decodeIfPresent(AssistantConfiguration.self, forKey: .assistant)
     }
 
     init(
         version: Int = 1,
         pages: [DashboardPageConfiguration],
         media: MediaConfiguration = MediaConfiguration(),
-        speakerClaim: SpeakerClaimConfig? = nil
+        speakerClaim: SpeakerClaimConfig? = nil,
+        assistant: AssistantConfiguration? = nil
     ) {
         self.version = version
         self.pages = pages
         self.media = media
         self.speakerClaim = speakerClaim
+        self.assistant = assistant
     }
 
     var dashboard: DashboardConfiguration {
@@ -49,7 +53,58 @@ struct AppConfiguration: Decodable, Equatable {
     func validated() throws -> AppConfiguration {
         _ = try dashboard.validated()
         try media.validate()
+        try assistant?.validate()
+        if assistant != nil, pages.contains(where: { $0.id == "assistant" }) {
+            throw AssistantConfiguration.ValidationError("The page id 'assistant' is reserved while the Assistant tab is enabled.")
+        }
         return self
+    }
+}
+
+/// Only routing and presentation belong in YAML. Pairing material stays in Keychain.
+struct AssistantConfiguration: Decodable, Equatable {
+    var title: String = "Assistant"
+    var systemIcon: String = "sparkles"
+    let agent: String
+    var session: String = "main"
+
+    var sessionKey: String { "agent:\(agent):\(session)" }
+
+    enum CodingKeys: String, CodingKey {
+        case title, agent, session
+        case systemIcon = "system_icon"
+    }
+
+    init(agent: String, session: String = "main", title: String = "Assistant", systemIcon: String = "sparkles") {
+        self.agent = agent
+        self.session = session
+        self.title = title
+        self.systemIcon = systemIcon
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        agent = try c.decode(String.self, forKey: .agent)
+        session = try c.decodeIfPresent(String.self, forKey: .session) ?? "main"
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? "Assistant"
+        systemIcon = try c.decodeIfPresent(String.self, forKey: .systemIcon) ?? "sparkles"
+    }
+
+    func validate() throws {
+        for (name, value) in [("agent", agent), ("session", session)] {
+            guard value.range(of: #"^[a-z0-9][a-z0-9_-]{0,63}$"#, options: .regularExpression) != nil else {
+                throw ValidationError("assistant.\(name) must be 1–64 lowercase letters, digits, underscores or hyphens, starting with a letter or digit.")
+            }
+        }
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !systemIcon.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ValidationError("Assistant title and system_icon must not be empty.")
+        }
+    }
+
+    struct ValidationError: LocalizedError {
+        let errorDescription: String?
+        init(_ message: String) { errorDescription = message }
     }
 }
 

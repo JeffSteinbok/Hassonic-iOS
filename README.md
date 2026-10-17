@@ -194,6 +194,7 @@ scripts/validate_config.sh hassonic.yaml
 ```
 
 More: [Spotify and Alexa](docs/SPOTIFY_AND_ALEXA.md) ·
+[Assistant and device pairing](docs/assistant.md) ·
 [Live Activity](docs/live-activity.md) ·
 [Push notifications](docs/push-notification-setup.md)
 
