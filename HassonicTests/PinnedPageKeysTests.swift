@@ -15,7 +15,7 @@ final class PinnedPageKeysTests: XCTestCase {
     func testTVAndBox_volumeOnTheTVAndPlayOnTheBox() {
         let keys = PinnedPageKeys.keys(for: page([.tvRemote(.init(tv: samsung, box: xfinity))]))
 
-        XCTAssertEqual(keys.map(\.label), ["Power", "Volume Down", "Mute", "Volume Up", "Play/Pause"])
+        XCTAssertEqual(keys.map(\.label), ["Samsung TV Power", "Samsung TV Volume Down", "Samsung TV Mute", "Samsung TV Volume Up", "Xfinity Play/Pause"])
         XCTAssertEqual(keys[0].actions, [.init(kind: .runScript, entityId: "script.tv_power")])
         XCTAssertEqual(keys[3].actions, [.init(kind: .send, entityId: "remote.tv", command: "KEY_VOLUP")])
         XCTAssertEqual(keys[4].actions, [.init(kind: .send, entityId: "remote.xfinity", command: "play_pause")])

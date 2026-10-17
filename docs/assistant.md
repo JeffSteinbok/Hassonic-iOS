@@ -115,6 +115,13 @@ separate gateway/plugin feature; this app does not install it.
 
 ## Protocol references
 
+For an opt-in physical-device integration test, copy a fresh limited setup code
+to the Dev app's `Documents/openclaw-assistant-setup-code.txt`, then run
+`AssistantDeviceIntegrationTests/testLiveDevicePairingAndChat` on that device.
+The test consumes the setup file, uses the household's configured agent/session,
+sends a harmless connectivity request and leaves the issued credential in
+Keychain for normal use. Without that file it skips and makes no connection.
+
 - [OpenClaw gateway protocol](https://docs.openclaw.ai/gateway/protocol)
 - [Device authentication](https://docs.openclaw.ai/gateway/protocol/auth)
 - [Operator scopes](https://docs.openclaw.ai/gateway/operator-scopes)
