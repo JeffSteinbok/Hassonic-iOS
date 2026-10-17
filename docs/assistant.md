@@ -18,9 +18,15 @@ Without this block there is no Assistant microphone, no gateway
 connection and no Assistant Keychain access. `assistant` becomes a reserved
 page ID while Assistant is enabled.
 
+The gateway must actually have an agent named `hassonic`; pinning its name in
+the app does not create it. Give it its own workspace and an appropriate tool
+policy. An absent agent is shown as "Not sent", not a connection interruption.
+
 A microphone beside the hamburger menu opens Assistant from Music, dashboard
 pages and rooms. It presents a directive sheet without changing the current
 page or adding a tab. `hassonic://assistant` opens the same sheet.
+The toolbar microphone starts listening; a notification/deep link only opens
+status and never starts recording by itself.
 
 ## Pair a device
 
@@ -73,22 +79,23 @@ identity-proxy authentication is not implemented in this client.
 
 ## Record, send and track a directive
 
-- Hold the large microphone to record. Pauses do not end the recording;
-  release it to finish, with a one-minute recording limit.
-- Review and optionally edit the transcription, then tap Send directive.
-  Recording never sends automatically. You can also type a directive.
-- The sheet shows live progress and the final result for that directive.
-  New directive clears the result. There is no conversation history or chat UI.
-- With VoiceOver, double tap the microphone to start and stop recording.
-- Stop directive requests cancellation of the current run. It cannot undo an action
+- Tap the toolbar microphone and speak. Recording starts when connected; the
+  panel shows Listening and the live transcription. A short pause finishes
+  speech recognition and sends the directive automatically. There is no review
+  screen, Send button, or conversation history. Cancel closes the microphone
+  without sending; Finish speaking ends recognition immediately.
+- The same compact panel changes to Sending, Working and the final result.
+  Clear failures say what needs fixing. A lost acknowledgement is reported as
+  uncertain, never automatically retried. Silence sends nothing.
+- Stop requests cancellation of the current run. It cannot undo an action
   that already happened.
-- Closing the sheet while a directive is running keeps its connection alive
-  while the app is in the foreground. Tap the toolbar microphone to return.
+- Closing the sheet keeps its connection alive while the app is in the
+  foreground. Tap the toolbar microphone to return to a running directive.
 - Backgrounding closes the socket and marks an unfinished directive's status
   unavailable. It may still be running on OpenClaw. No directive is automatically
   resent, and a missed final response is not reconstructed from shared history.
-- Assistant connection details and Forget gateway are available from the
-  sheet's information button and Settings. Forget deletes local credentials
+- Assistant connection details and Forget gateway are available in Settings.
+  Forget deletes local credentials
   and the device key; it does not revoke the server's device record.
 - Revoke a lost device on the gateway, using the device ID shown in Settings:
 
@@ -126,9 +133,12 @@ separate gateway/plugin feature; this app does not install it.
 For an opt-in physical-device integration test, copy a fresh limited setup code
 to the Dev app's `Documents/openclaw-assistant-setup-code.txt`, then run
 `AssistantDeviceIntegrationTests/testLiveDevicePairingAndChat` on that device.
+To test an already-paired phone without replacing its credential, supply an
+empty `Documents/openclaw-assistant-live-test.txt` marker instead. The test
+consumes either opt-in file before using the live gateway.
 The test consumes the setup file, uses the `hassonic` agent and configured session,
 sends a harmless connectivity request and leaves the issued credential in
-Keychain for normal use. Without that file it skips and makes no connection.
+Keychain for normal use. Without either opt-in file it skips and makes no connection.
 
 - [OpenClaw gateway protocol](https://docs.openclaw.ai/gateway/protocol)
 - [Device authentication](https://docs.openclaw.ai/gateway/protocol/auth)

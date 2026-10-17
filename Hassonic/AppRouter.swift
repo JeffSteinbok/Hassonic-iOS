@@ -35,6 +35,7 @@ final class AppRouter: ObservableObject {
     }
     @Published var musicShowPlayOn: Bool = false
     @Published var presentedSheet: AppSheet?
+    @Published private(set) var assistantStartsRecording = false
     /// The rooms pushed on the first page, which is where their tiles are.
     @Published var roomPath: [String] = []
     private var dashboardPageIDs: Set<String> = ["home", "security"]
@@ -46,6 +47,12 @@ final class AppRouter: ObservableObject {
     func setAssistantEnabled(_ enabled: Bool) {
         assistantEnabled = enabled
         if !enabled, presentedSheet == .assistant { presentedSheet = nil }
+    }
+
+    func recordAssistantDirective() {
+        guard assistantEnabled else { return }
+        assistantStartsRecording = true
+        presentedSheet = .assistant
     }
 
     /// Where the last tab picked is kept, so a relaunch or a reconnect lands
@@ -134,6 +141,7 @@ final class AppRouter: ObservableObject {
 
         switch (host, subpath) {
         case ("assistant", _) where assistantEnabled:
+            assistantStartsRecording = false
             presentedSheet = .assistant
         case ("music", "playon"):
             navigate(to: .musicPlayOn)

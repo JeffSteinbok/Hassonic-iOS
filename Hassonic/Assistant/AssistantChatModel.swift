@@ -203,7 +203,14 @@ final class AssistantChatModel: ObservableObject {
                 awaitingAcknowledgement = false
                 earlyEvents = []
                 activeRunID = nil
-                markInterrupted()
+                if let failure = error as? OpenClawError, failure.isRequestRejected {
+                    directive?.status = .failed
+                    directive?.progress = "Not sent"
+                    directive?.response = failure.localizedDescription
+                    errorMessage = nil
+                } else {
+                    markInterrupted()
+                }
             }
         }
     }

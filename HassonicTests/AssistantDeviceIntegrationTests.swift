@@ -9,10 +9,14 @@ final class AssistantDeviceIntegrationTests: XCTestCase {
     func testLiveDevicePairingAndChat() async throws {
         let documents = try XCTUnwrap(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first)
         let setupURL = documents.appendingPathComponent("openclaw-assistant-setup-code.txt")
-        try XCTSkipUnless(FileManager.default.fileExists(atPath: setupURL.path), "Live device pairing is opt-in; no setup code supplied.")
-        let setupCode = try String(contentsOf: setupURL, encoding: .utf8)
+        let reuseURL = documents.appendingPathComponent("openclaw-assistant-live-test.txt")
+        let hasSetup = FileManager.default.fileExists(atPath: setupURL.path)
+        let reuseCredential = FileManager.default.fileExists(atPath: reuseURL.path)
+        try XCTSkipUnless(hasSetup || reuseCredential, "Live device test is opt-in; no setup code or opt-in marker supplied.")
+        let setupCode = hasSetup ? try String(contentsOf: setupURL, encoding: .utf8) : nil
         // Consume the transient bootstrap artifact immediately. Only Keychain survives.
-        try FileManager.default.removeItem(at: setupURL)
+        if hasSetup { try FileManager.default.removeItem(at: setupURL) }
+        if reuseCredential { try FileManager.default.removeItem(at: reuseURL) }
         let configurationDeadline = Date().addingTimeInterval(30)
         while Date() < configurationDeadline, AppConfigurationLoader.launchConfiguration()?.assistant == nil {
             try await Task.sleep(for: .milliseconds(100))
@@ -22,7 +26,7 @@ final class AssistantDeviceIntegrationTests: XCTestCase {
         let model = AssistantChatModel()
         defer { model.pause() }
         model.activate(configuration: configuration)
-        try model.pair(setupCode)
+        if let setupCode { try model.pair(setupCode) }
         let deadline = Date().addingTimeInterval(90)
         while Date() < deadline, model.state != .connected {
             if model.state == .needsPairing, let error = model.errorMessage { XCTFail(error); return }
@@ -33,6 +37,10 @@ final class AssistantDeviceIntegrationTests: XCTestCase {
         model.send("Connectivity test from Hassonic on this iPhone. Reply exactly HASSONIC_DEVICE_OK. Do not call any tools.")
         let replyDeadline = Date().addingTimeInterval(90)
         while Date() < replyDeadline {
+            if model.directive?.status == .failed {
+                XCTFail(model.directive?.response ?? model.errorMessage ?? "The directive failed.")
+                return
+            }
             if model.directive?.response.contains("HASSONIC_DEVICE_OK") == true, model.directive?.status == .completed {
                 XCTAssertNotNil(try OpenClawCredentialStore().credential(), "Keep the device credential for normal app use.")
                 return

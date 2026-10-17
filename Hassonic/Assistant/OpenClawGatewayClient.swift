@@ -212,7 +212,9 @@ final class OpenClawGatewayClient {
                 // Do not display the gateway's arbitrary error text: it may contain credentials or transcript text.
                 let rawCode = error["code"] as? String ?? "UNKNOWN"
                 let code = rawCode.range(of: #"^[A-Z0-9_]{1,64}$"#, options: .regularExpression) != nil ? rawCode : "UNKNOWN"
-                finish(id, result: .failure(OpenClawError.rpc(code: code, detail: details?["code"] as? String)))
+                let failure: OpenClawError = code == "INVALID_REQUEST" && error["message"] as? String == "Unknown agent id \"hassonic\""
+                    ? .agentUnavailable : .rpc(code: code, detail: details?["code"] as? String)
+                finish(id, result: .failure(failure))
             }
         default: break
         }

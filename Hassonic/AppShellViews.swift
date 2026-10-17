@@ -141,7 +141,7 @@ struct AppMenuButton: View {
             menu
             if configurationLoader.appConfiguration.assistant != nil {
                 Button {
-                    router.presentedSheet = .assistant
+                    router.recordAssistantDirective()
                 } label: {
                     Image(systemName: assistant.directive?.status == .running ? "waveform" : "mic.fill")
                 }

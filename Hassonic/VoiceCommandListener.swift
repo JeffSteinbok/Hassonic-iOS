@@ -103,7 +103,11 @@ final class VoiceCommandListener: ObservableObject {
                 // A cancelled session still reports in; it mustn't end the next one.
                 guard let self, self.request === request else { return }
                 if let words { self.heard(words) }
-                if isFinal || error != nil { self.finish() }
+                if isFinal || error != nil {
+                    let failedWithoutSpeech = error != nil && self.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    self.finish()
+                    if failedWithoutSpeech { self.state = .unavailable }
+                }
             }
         }
         // Hold mode records through pauses; a safety cap prevents an indefinitely open mic.

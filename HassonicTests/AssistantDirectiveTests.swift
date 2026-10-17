@@ -89,6 +89,48 @@ final class AssistantDirectiveTests: XCTestCase {
         XCTAssertEqual((socket.sent.last?["params"] as? [String: Any])?["agentId"] as? String, "hassonic")
     }
 
+    func testMissingAgentIsAnActionableFailureNotAConnectionInterruption() async {
+        let socket = FakeOpenClawSocket()
+        socket.respondToChat()
+        let defaultResponder = socket.onSend
+        socket.onSend = { frame in
+            if frame["method"] as? String == "chat.send" {
+                socket.emit(["type": "res", "id": frame["id"]!, "ok": false,
+                             "error": ["code": "INVALID_REQUEST", "message": "Unknown agent id \"hassonic\""]])
+            } else { defaultResponder?(frame) }
+        }
+        let model = await connectedModel(socket: socket)
+        defer { model.pause() }
+        model.send("Test directive")
+        for _ in 0..<300 where model.directive?.status == .running { await Task.yield() }
+        XCTAssertEqual(model.directive?.status, .failed)
+        XCTAssertEqual(model.directive?.progress, "Not sent")
+        XCTAssertEqual(model.directive?.response, OpenClawError.agentUnavailable.localizedDescription)
+        XCTAssertEqual(model.state, .connected)
+        XCTAssertNil(model.activeRunID)
+        XCTAssertNil(model.errorMessage)
+        XCTAssertEqual(socket.sent.filter { $0["method"] as? String == "chat.send" }.count, 1)
+    }
+
+    func testRejectedRequestDoesNotDisplayArbitraryGatewayText() async {
+        let socket = FakeOpenClawSocket()
+        socket.respondToChat()
+        let defaultResponder = socket.onSend
+        socket.onSend = { frame in
+            if frame["method"] as? String == "chat.send" {
+                socket.emit(["type": "res", "id": frame["id"]!, "ok": false,
+                             "error": ["code": "FORBIDDEN", "message": "private-credential-and-transcript"]])
+            } else { defaultResponder?(frame) }
+        }
+        let model = await connectedModel(socket: socket)
+        defer { model.pause() }
+        model.send("Test directive")
+        for _ in 0..<300 where model.directive?.status == .running { await Task.yield() }
+        XCTAssertEqual(model.directive?.status, .failed)
+        XCTAssertFalse(model.directive?.response.contains("private-credential") == true)
+        XCTAssertNil(model.activeRunID)
+    }
+
     func testAssistantSheetDoesNotChangeThePage() throws {
         let router = AppRouter()
         router.setAssistantEnabled(true)
@@ -97,6 +139,12 @@ final class AssistantDirectiveTests: XCTestCase {
             router.handle(url: try XCTUnwrap(URL(string: "hassonic://assistant")))
             XCTAssertEqual(router.presentedSheet, .assistant)
             XCTAssertEqual(router.selectedTab, tab)
+            XCTAssertFalse(router.assistantStartsRecording, "Opening status from a notification must not open the microphone.")
+            router.presentedSheet = nil
+            router.recordAssistantDirective()
+            XCTAssertEqual(router.presentedSheet, .assistant)
+            XCTAssertTrue(router.assistantStartsRecording)
+            XCTAssertEqual(router.selectedTab, tab)
             router.presentedSheet = nil
         }
     }
@@ -104,6 +152,19 @@ final class AssistantDirectiveTests: XCTestCase {
 
 @MainActor
 final class DirectiveVoicePermissionTests: XCTestCase {
+    func testTapToSpeakCanBeCancelledDuringPermissionPrompt() async {
+        var authorization: CheckedContinuation<Bool, Never>?
+        let listener = VoiceCommandListener(authorize: { await withCheckedContinuation { authorization = $0 } })
+        var delivered = false
+        let recording = Task { await listener.start { _ in delivered = true } }
+        for _ in 0..<100 where authorization == nil { await Task.yield() }
+        listener.cancel()
+        authorization?.resume(returning: true)
+        await recording.value
+        XCTAssertEqual(listener.state, .idle)
+        XCTAssertFalse(delivered)
+    }
+
     func testReleasingDuringPermissionPromptDoesNotOpenMicrophoneLater() async {
         var authorization: CheckedContinuation<Bool, Never>?
         let listener = VoiceCommandListener(authorize: { await withCheckedContinuation { authorization = $0 } })

@@ -172,7 +172,7 @@ struct HassonicApp: App {
                 case .about: AboutView()
                 case .assistant:
                     if let configuration = dashboardLoader.appConfiguration.assistant {
-                        AssistantView(configuration: configuration)
+                        AssistantView(configuration: configuration, startsRecording: router.assistantStartsRecording)
                     }
                 }
             }

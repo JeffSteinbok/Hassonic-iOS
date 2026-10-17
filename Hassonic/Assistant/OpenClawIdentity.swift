@@ -12,6 +12,7 @@ enum OpenClawError: LocalizedError, Equatable {
     case invalidResponse
     case unsupportedGateway
     case unsafeCredential
+    case agentUnavailable
     case rpc(code: String, detail: String?)
 
     var errorDescription: String? {
@@ -25,9 +26,12 @@ enum OpenClawError: LocalizedError, Equatable {
         case .invalidResponse: return "The gateway sent an unexpected response."
         case .unsupportedGateway: return "This Assistant needs an OpenClaw gateway with protocol v4 and mobile device pairing."
         case .unsafeCredential: return "Use a limited setup code with chat access and without administrator or pairing access."
+        case .agentUnavailable: return "The hassonic agent isn't configured on the gateway. Ask the gateway owner to add it."
         case .rpc(let code, let detail):
             if code == "NOT_PAIRED" || detail == "PAIRING_REQUIRED" { return "Waiting for device approval on the gateway…" }
             if requiresPairing { return "The gateway rejected this credential. Forget the gateway and pair with a new limited setup code." }
+            if code == "FORBIDDEN" { return "This device doesn't have permission to send directives. Ask the gateway owner to check its access." }
+            if code == "INVALID_REQUEST" { return "The gateway rejected this directive. Check that the hassonic agent and session are available." }
             return "The gateway couldn't complete the request (\(code))."
         }
     }
@@ -37,6 +41,13 @@ enum OpenClawError: LocalizedError, Equatable {
             return code == "NOT_PAIRED" || code == "PAIRING_REQUIRED" || detail == "PAIRING_REQUIRED"
         }
         return false
+    }
+
+    /// An explicit rejection is different from a lost acknowledgement.
+    var isRequestRejected: Bool {
+        if self == .agentUnavailable { return true }
+        guard case .rpc(let code, _) = self else { return false }
+        return ["INVALID_REQUEST", "UNAUTHORIZED", "FORBIDDEN", "NOT_PAIRED", "PAIRING_REQUIRED"].contains(code)
     }
 
     var requiresPairing: Bool {
