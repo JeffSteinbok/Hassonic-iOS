@@ -198,6 +198,7 @@ speak a directive, then follow its progress and result. It sends when you finish
 
 More: [Spotify and Alexa](docs/SPOTIFY_AND_ALEXA.md) ·
 [Assistant and device pairing](docs/assistant.md) ·
+[Jev safety skill](docs/assistant-safety.md) ·
 [Live Activity](docs/live-activity.md) ·
 [Push notifications](docs/push-notification-setup.md)
 

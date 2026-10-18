@@ -1,5 +1,9 @@
 # Assistant
 
+This is the device-to-OpenClaw integration guide. See
+[Jev safety skill / Hass Guard](assistant-safety.md) for server-side home-control
+policy, protected credentials, the decision threshold and troubleshooting.
+
 Hassonic sends directives only to the `hassonic` agent on your OpenClaw gateway. Enable Assistant in
 your Home Assistant-hosted YAML:
 
@@ -31,7 +35,7 @@ status and never starts recording by itself.
 ## Pair a device
 
 The gateway must support protocol v4 and limited mobile pairing. Tested
-against OpenClaw 2026.10.2. Use a `wss://` endpoint with a certificate trusted
+against OpenClaw 2026.10.2 and 2026.10.4. Use a `wss://` endpoint with a certificate trusted
 by iOS, such as your existing HTTPS reverse proxy. Plain `ws://`, embedded
 credentials and query-string credentials are rejected; there is no TLS bypass.
 
@@ -79,6 +83,9 @@ gateway. Do not treat it as isolation between mutually untrusted users.
 
 Agent tools and sandbox policy are enforced on the gateway. Review those
 policies separately; Hassonic does not change them or grant additional tools.
+The reference household's `hass-guard` plugin checks HA service calls with Jev;
+its current policy blocks low-confidence/unavailable evaluations rather than
+automatically requesting approval. It is configured separately from this app.
 Gateways using verified-person roles may reject device-token authentication;
 identity-proxy authentication is not implemented in this client.
 
