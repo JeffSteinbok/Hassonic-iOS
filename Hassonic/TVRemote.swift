@@ -61,6 +61,46 @@ enum TVRemoteKey: CaseIterable {
         }
     }
 
+    /// Its name in the config: the case name, e.g. `playPause`.
+    init?(name: String) {
+        guard let key = Self.allCases.first(where: { "\($0)" == name }) else { return nil }
+        self = key
+    }
+
+    /// The symbol it's drawn with where the card doesn't draw it specially,
+    /// e.g. on the Lock Screen.
+    var systemImage: String {
+        switch self {
+        case .power: return "power"
+        case .volumeUp: return "speaker.wave.3.fill"
+        case .volumeDown: return "speaker.wave.1.fill"
+        case .mute: return "speaker.slash.fill"
+        case .up: return "chevron.up"
+        case .down: return "chevron.down"
+        case .left: return "chevron.left"
+        case .right: return "chevron.right"
+        case .ok, .enter: return "circle"
+        case .back, .lastChannel: return "arrow.uturn.backward"
+        case .home: return "house"
+        case .exit: return "xmark"
+        case .info: return "info"
+        case .guide: return "list.bullet.rectangle"
+        case .menu: return "line.3.horizontal"
+        case .pageUp: return "chevron.up.2"
+        case .pageDown: return "chevron.down.2"
+        case .channelUp: return "plus"
+        case .channelDown: return "minus"
+        case .rewind: return "backward.fill"
+        case .playPause: return "playpause.fill"
+        case .fastForward: return "forward.fill"
+        case .record: return "record.circle"
+        case .keyA: return "a.circle"
+        case .keyB: return "b.circle"
+        case .keyC: return "c.circle"
+        case .keyD: return "d.circle"
+        }
+    }
+
     /// The command for this key on `kind`, or nil if it has none. Samsung
     /// play/pause is nil too: it has no single key code (see
     /// `TVRemoteAction.samsungPlayPause`).
@@ -191,6 +231,7 @@ enum TVRemoteAction: Equatable {
 ///       title: Family Room
 ///       tv:  { kind: samsung, remote: remote.tv, mediaPlayer: media_player.tv }
 ///       box: { kind: xfinity, remote: remote.xfinity }
+///       lockScreen: [open, tv.playPause, box.playPause]
 struct DashboardTVRemoteConfiguration: Decodable, Equatable {
     struct Device: Decodable, Equatable {
         let kind: TVRemoteDeviceKind
@@ -223,14 +264,36 @@ struct DashboardTVRemoteConfiguration: Decodable, Equatable {
         var id: String { name }
     }
 
+    /// A key on the page's pinned Lock Screen activity: `open` for the page
+    /// itself, or a side and key, e.g. `box.playPause`.
+    enum LockScreenKey: Equatable {
+        case open
+        case key(TVRemoteKey, TVRemoteSide)
+
+        init?(_ name: String) {
+            if name == "open" {
+                self = .open
+                return
+            }
+            let parts = name.split(separator: ".", maxSplits: 1).map(String.init)
+            guard parts.count == 2, let side = TVRemoteSide(rawValue: parts[0]),
+                  let key = TVRemoteKey(name: parts[1]) else { return nil }
+            self = .key(key, side)
+        }
+    }
+
     let title: String?
     var tv: Device?
     var box: Device?
+    /// The keys the page's pinned Lock Screen activity shows, in order. Nil
+    /// means the TV's power, volume and mute and the box's play/pause.
+    var lockScreen: [String]?
 
-    init(title: String? = nil, tv: Device? = nil, box: Device? = nil) {
+    init(title: String? = nil, tv: Device? = nil, box: Device? = nil, lockScreen: [String]? = nil) {
         self.title = title
         self.tv = tv
         self.box = box
+        self.lockScreen = lockScreen
     }
 
     func device(_ side: TVRemoteSide) -> Device? {
@@ -294,6 +357,13 @@ struct DashboardTVRemoteConfiguration: Decodable, Equatable {
     func validate(cardType: String) throws {
         guard tv != nil || box != nil else {
             throw DashboardConfigurationError.tvRemoteNeedsADevice(cardType: cardType)
+        }
+        for name in lockScreen ?? [] {
+            switch LockScreenKey(name) {
+            case .open: continue
+            case .key(_, let side) where device(side) != nil: continue
+            default: throw DashboardConfigurationError.unknownLockScreenKey(name, cardType: cardType)
+            }
         }
     }
 }

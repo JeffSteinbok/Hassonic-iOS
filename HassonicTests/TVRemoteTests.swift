@@ -89,6 +89,30 @@ final class TVRemoteTests: XCTestCase {
         """), .tvRemoteNeedsADevice(cardType: "tv_remote"))
     }
 
+    func testLockScreenKeysLoad() throws {
+        let remote = try card("""
+                    tv: { kind: samsung, remote: remote.tv }
+                    box: { kind: xfinity, remote: remote.xfinity }
+                    lockScreen: [open, tv.playPause, box.playPause]
+        """)
+        XCTAssertEqual(remote.lockScreen?.compactMap(DashboardTVRemoteConfiguration.LockScreenKey.init),
+                       [.open, .key(.playPause, .tv), .key(.playPause, .box)])
+    }
+
+    func testALockScreenKeyForAMissingDeviceIsRejected() {
+        XCTAssertEqual(error("""
+                    tv: { kind: samsung, remote: remote.tv }
+                    lockScreen: [box.playPause]
+        """), .unknownLockScreenKey("box.playPause", cardType: "tv_remote"))
+    }
+
+    func testAMisspelledLockScreenKeyIsRejected() {
+        XCTAssertEqual(error("""
+                    tv: { kind: samsung, remote: remote.tv }
+                    lockScreen: [tv.play_pause]
+        """), .unknownLockScreenKey("tv.play_pause", cardType: "tv_remote"))
+    }
+
     func testWrongDomainsAreRejected() {
         XCTAssertEqual(error("""
                     tv: { kind: samsung, remote: media_player.tv }

@@ -417,3 +417,21 @@ Parse failures name the offending key and its path, with array indices as `[n]` 
 
 The warning on the dashboard is sticky: it clears only on the next successful fetch,
 which happens on the next launch, return to the foreground, or pull-to-refresh.
+
+## Assistant directives
+
+An optional top-level `assistant` block enables the microphone beside the menu on
+each page. It opens a hold-to-record directive sheet with progress and a result.
+Gateway credentials
+are paired on each device and never belong in this file:
+
+```yaml
+assistant:
+  session: main
+  title: Assistant
+  system_icon: sparkles
+```
+
+The app always uses the `hassonic` agent; YAML cannot override it. Legacy `agent`
+keys are ignored. `session`, `title` and `system_icon` have the defaults shown
+above. See [Assistant setup](assistant.md) for pairing and permissions.

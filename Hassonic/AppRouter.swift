@@ -23,6 +23,7 @@ enum AppDestination: Hashable {
 enum AppSheet: String, Identifiable {
     case settings
     case about
+    case assistant
 
     var id: String { rawValue }
 }
@@ -34,12 +35,25 @@ final class AppRouter: ObservableObject {
     }
     @Published var musicShowPlayOn: Bool = false
     @Published var presentedSheet: AppSheet?
+    @Published private(set) var assistantStartsRecording = false
     /// The rooms pushed on the first page, which is where their tiles are.
     @Published var roomPath: [String] = []
     private var dashboardPageIDs: Set<String> = ["home", "security"]
     private var roomPageIDs: Set<String> = []
     /// The first tab, which carries the room tiles.
     private var roomsHostPageID: String?
+    private var assistantEnabled = false
+
+    func setAssistantEnabled(_ enabled: Bool) {
+        assistantEnabled = enabled
+        if !enabled, presentedSheet == .assistant { presentedSheet = nil }
+    }
+
+    func recordAssistantDirective() {
+        guard assistantEnabled else { return }
+        assistantStartsRecording = true
+        presentedSheet = .assistant
+    }
 
     /// Where the last tab picked is kept, so a relaunch or a reconnect lands
     /// back on it instead of the first page. Nil (tests) remembers nothing.
@@ -81,7 +95,7 @@ final class AppRouter: ObservableObject {
 
     /// The tab last picked, if it still exists; otherwise the first page.
     func selectConnectedLandingPage(from pages: [DashboardPageConfiguration]) {
-        if let remembered = rememberedTab(), Self.tab(remembered, existsIn: pages) {
+        if let remembered = rememberedTab(), tab(remembered, existsIn: pages) {
             selectedTab = remembered
             return
         }
@@ -105,11 +119,12 @@ final class AppRouter: ObservableObject {
     private func rememberedTab() -> AppTab? {
         guard let stored = lastTabStore?.string(forKey: Self.lastTabKey) else { return nil }
         if stored == "music" { return .music }
+        if stored == "assistant" { return .music }
         if stored.hasPrefix("dashboard:") { return .dashboard(String(stored.dropFirst("dashboard:".count))) }
         return nil
     }
 
-    private static func tab(_ tab: AppTab, existsIn pages: [DashboardPageConfiguration]) -> Bool {
+    private func tab(_ tab: AppTab, existsIn pages: [DashboardPageConfiguration]) -> Bool {
         switch tab {
         case .connection: return false
         case .music: return true
@@ -117,7 +132,7 @@ final class AppRouter: ObservableObject {
         }
     }
 
-    static let schemes: Set<String> = ["hassonic"]
+    nonisolated static let schemes: Set<String> = ["hassonic"]
 
     func handle(url: URL) {
         guard let scheme = url.scheme?.lowercased(), Self.schemes.contains(scheme) else { return }
@@ -125,6 +140,9 @@ final class AppRouter: ObservableObject {
         let subpath = url.pathComponents.filter { $0 != "/" }.first
 
         switch (host, subpath) {
+        case ("assistant", _) where assistantEnabled:
+            assistantStartsRecording = false
+            presentedSheet = .assistant
         case ("music", "playon"):
             navigate(to: .musicPlayOn)
         case ("music", _):

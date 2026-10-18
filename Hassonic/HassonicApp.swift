@@ -62,6 +62,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     private(set) var isFirebaseConfigured = false
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
         guard let configuration = FirebaseConfiguration.load() else {
             Log.push.note("Firebase configuration is missing or invalid; push notifications are disabled.")
             return true
@@ -83,6 +84,30 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         guard isFirebaseConfigured else { return }
         Messaging.messaging().apnsToken = deviceToken
+    }
+}
+
+enum NotificationLink {
+    static func url(from userInfo: [AnyHashable: Any]) -> URL? {
+        guard let value = userInfo["url"] as? String,
+              let url = URL(string: value), let scheme = url.scheme?.lowercased(),
+              AppRouter.schemes.contains(scheme), url.host != nil,
+              url.user == nil, url.password == nil else { return nil }
+        return url
+    }
+}
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        if response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+           let url = NotificationLink.url(from: response.notification.request.content.userInfo) {
+            Task { @MainActor in PendingLink.shared.url = url }
+        }
+        completionHandler()
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound, .list])
     }
 }
 
@@ -124,6 +149,9 @@ struct HassonicApp: App {
     @StateObject private var dashboardLoader = AppConfigurationLoader()
     @StateObject private var pushCoordinator = PushNotificationCoordinator()
     @StateObject private var oauthClient = HAOAuthClient()
+    @StateObject private var assistant = AssistantChatModel()
+    @State private var pendingLinkURL: URL?
+    @State private var hasRefreshedConfiguration = false
     @State private var wasBackgrounded = false
     @State private var hasSavedConnection = AppRootState.hasSavedConnection
     /// True from launch until the first connection attempt is under way, so
@@ -142,23 +170,31 @@ struct HassonicApp: App {
                 switch sheet {
                 case .settings: ContentView()
                 case .about: AboutView()
+                case .assistant:
+                    if let configuration = dashboardLoader.appConfiguration.assistant {
+                        AssistantView(configuration: configuration, startsRecording: router.assistantStartsRecording)
+                    }
                 }
             }
             .environmentObject(haClient)
             .environmentObject(router)
             .environmentObject(dashboardLoader)
+            .environmentObject(assistant)
             .onOpenURL { url in
-                router.handle(url: url)
+                pendingLinkURL = url
+                routePendingLink()
             }
             // A Shortcuts action or app-icon quick action. A turn later, so a
             // cold launch has its pages set (onAppear) before it's handled.
             .onReceive(PendingLink.shared.$url.compactMap { $0 }) { url in
                 PendingLink.shared.url = nil
-                Task { @MainActor in router.handle(url: url) }
+                pendingLinkURL = url
+                routePendingLink()
             }
             .onAppear {
                 appDelegate.pushCoordinator = pushCoordinator
                 router.setDashboardPages(dashboardLoader.configuration.pages)
+                router.setAssistantEnabled(dashboardLoader.appConfiguration.assistant != nil)
                 PageShortcuts.update(for: dashboardLoader.configuration.pages)
                 // Token refresh has nothing to do with push, so it's set up
                 // whether or not Firebase is.
@@ -181,6 +217,8 @@ struct HassonicApp: App {
                 // disconnects, so a state change is the moment to re-check.
                 hasSavedConnection = AppRootState.hasSavedConnection
                 if !hasSavedConnection {
+                    assistant.pause()
+                    hasRefreshedConfiguration = false
                     // Signed out: the next sign-in starts over from the splash.
                     hasConnected = false
                 }
@@ -207,11 +245,18 @@ struct HassonicApp: App {
                         baseURLString: haClient.baseURLString,
                         accessToken: haClient.accessToken
                     )
+                    hasRefreshedConfiguration = true
+                    routePendingLink()
                 }
             }
             .onChange(of: dashboardLoader.configuration) { _, configuration in
                 router.setDashboardPages(configuration.pages)
                 PageShortcuts.update(for: configuration.pages)
+            }
+            .onChange(of: dashboardLoader.appConfiguration.assistant) { _, configuration in
+                router.setAssistantEnabled(configuration != nil)
+                if configuration == nil { assistant.pause() }
+                routePendingLink()
             }
             .onReceive(haClient.$entities) { _ in syncLiveActivity() }
             .onChange(of: dashboardLoader.appConfiguration.media) { _, _ in
@@ -230,6 +275,7 @@ struct HassonicApp: App {
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {
                 case .background:
+                    assistant.pause()
                     wasBackgrounded = true
                 case .active where wasBackgrounded:
                     wasBackgrounded = false
@@ -296,6 +342,13 @@ struct HassonicApp: App {
                 }
             }
         }
+    }
+
+    private func routePendingLink() {
+        guard hasConnected, hasRefreshedConfiguration, let url = pendingLinkURL else { return }
+        router.setAssistantEnabled(dashboardLoader.appConfiguration.assistant != nil)
+        pendingLinkURL = nil
+        router.handle(url: url)
     }
 
     /// Connects with the saved credentials, at launch and from Try Again.

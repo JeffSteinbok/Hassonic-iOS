@@ -77,8 +77,8 @@ targets:
         # at "Missing Compliance" and no tester can install it.
         ITSAppUsesNonExemptEncryption: false
         # The Xfinity remote's voice key.
-        NSMicrophoneUsageDescription: "Hassonic listens when you tap the microphone on the Xfinity remote, to send what you say to your cable box."
-        NSSpeechRecognitionUsageDescription: "What you say to the Xfinity remote's microphone is turned into text, on your iPhone when it can be, and sent to your cable box."
+        NSMicrophoneUsageDescription: "Hassonic listens while you record an Assistant directive or use the TV remote's microphone."
+        NSSpeechRecognitionUsageDescription: "Your Assistant directives and TV remote voice commands are turned into text, on your iPhone when available."
         # Color only: the splash draws the mark with the name and spinner
         # under it, centered as a group, so a launch-screen mark would jump.
         UILaunchScreen:

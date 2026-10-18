@@ -203,6 +203,10 @@ struct ContentView: View {
                 }
             }
 
+            if let configuration = dashboardLoader.appConfiguration.assistant {
+                AssistantSettingsSection(configuration: configuration)
+            }
+
             if hasSavedConnection {
                 Section {
                     Button("Sign Out", role: .destructive) {
