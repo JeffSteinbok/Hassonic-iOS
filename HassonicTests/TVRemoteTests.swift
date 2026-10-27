@@ -286,7 +286,7 @@ final class TVRemoteTests: XCTestCase {
 
     // MARK: The TV's app
 
-    func testRunningAppIsAListedNonInputSource() throws {
+    func testRunningAppMustBeAPositivelyKnownListedApp() throws {
         let remote = try familyRoom()
         let list = ["TV", "HDMI", "Netflix", "YouTube"]
         XCTAssertEqual(remote.runningApp(source: "Netflix", sourceList: list), "Netflix")
@@ -298,6 +298,48 @@ final class TVRemoteTests: XCTestCase {
         XCTAssertNil(remote.runningApp(source: "", sourceList: list))
         // Not in the list: not sure, so not an app.
         XCTAssertNil(remote.runningApp(source: "Mystery", sourceList: list))
+        // A listed source can be a user-renamed HDMI input, not a TV app.
+        for source in ["Comcast", "RECEIVER", "Game Console", "Mystery"] {
+            XCTAssertNil(remote.runningApp(source: source, sourceList: list + [source]))
+        }
+        XCTAssertEqual(remote.runningApp(source: "YouTube", sourceList: list), "YouTube")
+        XCTAssertNil(remote.runningApp(source: "Netflix", sourceList: []))
+    }
+
+    func testExplicitBoxSourcesDecodeAndOverrideEvenAppLikeNames() throws {
+        let remote = try card("""
+                    box_sources: [Comcast, Netflix]
+                    tv: { kind: samsung, remote: remote.tv }
+                    box: { kind: xfinity, remote: remote.xfinity }
+        """)
+        XCTAssertEqual(remote.boxSources, ["Comcast", "Netflix"])
+        XCTAssertNil(remote.runningApp(source: "Comcast", sourceList: ["Comcast"]))
+        XCTAssertNil(remote.runningApp(source: " netflix ", sourceList: ["Netflix"]))
+        XCTAssertEqual(remote.runningApp(source: "YouTube", sourceList: ["YouTube"]), "YouTube")
+    }
+
+    func testLegacyConfigAndCaseInsensitiveInputsStayUsable() throws {
+        let remote = try familyRoom()
+        XCTAssertNil(remote.boxSources)
+        for source in [" hdmi 1 ", "tv/hdmi", "TV", "Comcast", "New HDMI Name"] {
+            XCTAssertNil(remote.runningApp(source: source, sourceList: [source]))
+        }
+        XCTAssertEqual(remote.runningApp(source: " netflix ", sourceList: ["Netflix"]), "netflix")
+    }
+
+    func testBoxDisablingExplainsOffAndKnownAppsButNotUncertainSources() throws {
+        let remote = try familyRoom()
+        XCTAssertEqual(remote.boxDisabledReason(tvIsOff: true, runningApp: nil), "TV is off")
+        XCTAssertEqual(remote.boxDisabledReason(tvIsOff: true, runningApp: "Netflix"), "TV is off")
+        XCTAssertEqual(remote.boxDisabledReason(tvIsOff: false, runningApp: "Netflix"), "TV is showing Netflix")
+        for source in ["Comcast", "RECEIVER", "Unknown"] {
+            let app = remote.runningApp(source: source, sourceList: [source])
+            XCTAssertNil(remote.boxDisabledReason(tvIsOff: false, runningApp: app))
+        }
+        let tvOnly = try card("""
+                    tv: { kind: samsung, remote: remote.tv }
+        """)
+        XCTAssertNil(tvOnly.boxDisabledReason(tvIsOff: true, runningApp: "Netflix"))
     }
 
     func testNoTVMeansNoApp() throws {

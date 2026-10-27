@@ -24,12 +24,24 @@ enum TVRemoteDeviceKind: String, Decodable, Equatable {
     /// lists both in `source_list`, and Samsung reports any HDMI port, the
     /// tuner and AirPlay all as `TV/HDMI`.
     func isInput(_ source: String) -> Bool {
+        let source = source.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         switch self {
         case .samsung:
             return ["TV", "HDMI", "TV/HDMI"].contains(source) || source.hasPrefix("HDMI")
         case .xfinity:
             return false
         }
+    }
+
+    /// Positive identification only. A source list also contains user-renamed
+    /// HDMI inputs, so membership alone is not evidence that a source is an app.
+    func isKnownApp(_ source: String) -> Bool {
+        guard self == .samsung else { return false }
+        return ["netflix", "youtube", "youtube tv", "prime video", "amazon prime video",
+                "hulu", "disney+", "apple tv", "apple tv+", "hbo max", "max",
+                "peacock tv", "paramount+", "spotify - music and podcasts",
+                "xfinity stream", "internet", "plex - free movies ＆ tv", "mlb",
+                "tubi - free movies ＆ tv", "sling tv", "freevee"].contains(source.lowercased())
     }
 }
 
@@ -285,15 +297,23 @@ struct DashboardTVRemoteConfiguration: Decodable, Equatable {
     let title: String?
     var tv: Device?
     var box: Device?
+    /// TV source labels known to show this box, including renamed HDMI inputs.
+    var boxSources: [String]?
     /// The keys the page's pinned Lock Screen activity shows, in order. Nil
     /// means the TV's power, volume and mute and the box's play/pause.
     var lockScreen: [String]?
 
-    init(title: String? = nil, tv: Device? = nil, box: Device? = nil, lockScreen: [String]? = nil) {
+    enum CodingKeys: String, CodingKey {
+        case title, tv, box, lockScreen
+        case boxSources = "box_sources"
+    }
+
+    init(title: String? = nil, tv: Device? = nil, box: Device? = nil, lockScreen: [String]? = nil, boxSources: [String]? = nil) {
         self.title = title
         self.tv = tv
         self.box = box
         self.lockScreen = lockScreen
+        self.boxSources = boxSources
     }
 
     func device(_ side: TVRemoteSide) -> Device? {
@@ -324,13 +344,25 @@ struct DashboardTVRemoteConfiguration: Decodable, Equatable {
         tv?.mediaPlayer != nil && ["off", "standby"].contains(state)
     }
 
-    /// The app the TV is certainly showing, from its media player's `source`
-    /// and `source_list`: a listed source that isn't an input. Nil when it's
-    /// on an input (the box, AirPlay, …) or unknown.
+    /// Only disable the box for a positively recognized TV app. Unknown or
+    /// renamed sources stay usable, and explicit box sources always win.
     func runningApp(source: String?, sourceList: [String]) -> String? {
-        guard let tv, let source, !source.isEmpty,
-              sourceList.contains(source), !tv.kind.isInput(source) else { return nil }
+        guard let tv, let raw = source else { return nil }
+        let source = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        func matches(_ other: String) -> Bool {
+            source.caseInsensitiveCompare(other.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+        }
+        guard !source.isEmpty, sourceList.contains(where: matches),
+              !(boxSources ?? []).contains(where: matches),
+              !tv.kind.isInput(source), tv.kind.isKnownApp(source) else { return nil }
         return source
+    }
+
+    func boxDisabledReason(tvIsOff: Bool, runningApp: String?) -> String? {
+        guard box != nil else { return nil }
+        if tvIsOff { return "TV is off" }
+        if let runningApp { return "TV is showing \(runningApp)" }
+        return nil
     }
 
     func actions(for key: TVRemoteKey, on side: TVRemoteSide) -> [TVRemoteAction] {

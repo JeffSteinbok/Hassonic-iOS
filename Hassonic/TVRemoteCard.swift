@@ -44,6 +44,12 @@ struct TVRemoteCardView: View {
                 TVPanel(name: tv.displayName, app: tvApp, isOff: isOff, press: { press($0, on: .tv) }, showKeypad: { keypad = .tv })
             }
             if let box = configuration.box {
+                if let reason = boxDisabledReason {
+                    Label(reason, systemImage: "info.circle")
+                        .font(.footnote).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("remote.boxDisabledReason")
+                }
                 BoxPanel(name: box.displayName, menuLabel: box.kind.displayName,
                          voice: configuration.boxTakesVoice ? BoxPanel.Voice(
                             isListening: voice.state == .listening,
@@ -62,7 +68,7 @@ struct TVRemoteCardView: View {
                             .allowsHitTesting(false)
                     }
                     .animation(.easeInOut(duration: 0.2), value: [isOff, boxIsIdle])
-                    .accessibilityHint(isOff ? "Unavailable while the TV is off" : tvApp.map { "Unavailable while the TV is in \($0)" } ?? "")
+                    .accessibilityHint(boxDisabledReason ?? "")
             }
         }
         .disabled(!isAvailable)
@@ -106,7 +112,12 @@ struct TVRemoteCardView: View {
     private var isOff: Bool { tvIsOff && assumedOnUntil == nil }
 
     /// The box isn't on screen: the TV is off, or showing one of its own apps.
-    private var boxIsIdle: Bool { isOff || tvApp != nil }
+    private var boxIsIdle: Bool { boxDisabledReason != nil }
+
+    private var boxDisabledReason: String? {
+        if !isAvailable { return "Home Assistant is disconnected" }
+        return configuration.boxDisabledReason(tvIsOff: isOff, runningApp: tvApp)
+    }
 
     /// Starts listening, or, mid-command, sends what's been heard so far.
     private func toggleVoice() {
