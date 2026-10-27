@@ -145,7 +145,7 @@ struct AppMenuButton: View {
                 } label: {
                     Image(systemName: assistant.directive?.status == .running ? "waveform" : "mic.fill")
                 }
-                .accessibilityLabel(assistant.directive?.status == .running ? "Assistant directive in progress" : "Record a directive")
+                .accessibilityLabel(assistant.directive?.status == .running ? "\(assistant.assistantName) directive in progress" : "Record a directive for \(assistant.assistantName)")
                 .accessibilityIdentifier("assistant.open")
             }
         }

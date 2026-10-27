@@ -78,6 +78,7 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         # The Xfinity remote's voice key.
         NSMicrophoneUsageDescription: "Hassonic listens while you record an Assistant directive or use the TV remote's microphone."
+        NSCameraUsageDescription: "Hassonic uses the camera only when you scan a gateway pairing QR code."
         NSSpeechRecognitionUsageDescription: "Your Assistant directives and TV remote voice commands are turned into text, on your iPhone when available."
         # Color only: the splash draws the mark with the name and spinner
         # under it, centered as a group, so a launch-screen mark would jump.

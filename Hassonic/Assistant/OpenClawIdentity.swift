@@ -13,6 +13,8 @@ enum OpenClawError: LocalizedError, Equatable {
     case unsupportedGateway
     case unsafeCredential
     case agentUnavailable
+    case gatewayNotPaired
+    case directiveInProgress
     case rpc(code: String, detail: String?)
 
     var errorDescription: String? {
@@ -27,6 +29,8 @@ enum OpenClawError: LocalizedError, Equatable {
         case .unsupportedGateway: return "This Assistant needs an OpenClaw gateway with protocol v4 and mobile device pairing."
         case .unsafeCredential: return "Use a limited setup code with chat access and without administrator or pairing access."
         case .agentUnavailable: return "The hassonic agent isn't configured on the gateway. Ask the gateway owner to add it."
+        case .gatewayNotPaired: return "Connect this device with a setup code first."
+        case .directiveInProgress: return "Wait for the current command to finish or stop it before changing the gateway."
         case .rpc(let code, let detail):
             if code == "NOT_PAIRED" || detail == "PAIRING_REQUIRED" { return "Waiting for device approval on the gateway…" }
             if requiresPairing { return "The gateway rejected this credential. Forget the gateway and pair with a new limited setup code." }
@@ -86,10 +90,23 @@ struct OpenClawSetupCode {
     static func validatedURL(_ raw: String) throws -> URL {
         guard let url = URL(string: raw), url.scheme?.lowercased() == "wss",
               let host = url.host, !host.isEmpty,
-              url.user == nil, url.password == nil, url.query == nil, url.fragment == nil else {
+              url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
+              url.port.map({ (1...65535).contains($0) }) ?? true else {
             throw OpenClawError.insecureURL
         }
         return url
+    }
+
+    /// Address-editor convenience only. Pairing payloads keep strict WSS validation.
+    static func gatewayAddress(_ input: String) throws -> URL {
+        let raw = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty, raw.count <= 2048,
+              raw.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { throw OpenClawError.insecureURL }
+        let withScheme = raw.contains("://") ? raw : "wss://" + raw
+        guard var components = URLComponents(string: withScheme) else { throw OpenClawError.insecureURL }
+        if components.scheme?.lowercased() == "https" { components.scheme = "wss" }
+        guard let url = components.url else { throw OpenClawError.insecureURL }
+        return try validatedURL(url.absoluteString)
     }
 }
 

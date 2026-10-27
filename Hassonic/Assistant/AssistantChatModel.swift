@@ -79,6 +79,9 @@ final class AssistantChatModel: ObservableObject {
     @Published private(set) var transcript = AssistantTranscript()
     @Published private(set) var errorMessage: String?
     @Published private(set) var gatewayHost: String?
+    @Published private(set) var gatewayAddress: String?
+    @Published private(set) var hasSavedGateway = false
+    @Published private(set) var assistantName = "OpenClaw"
     @Published private(set) var deviceID: String?
     @Published private(set) var activeRunID: String?
     @Published private(set) var directive: AssistantDirective?
@@ -88,6 +91,7 @@ final class AssistantChatModel: ObservableObject {
     private var setup: OpenClawSetupCode?
     private var connectionTask: Task<Void, Never>?
     private var sendTask: Task<Void, Never>?
+    private var identityTask: Task<Void, Never>?
     private var generation = UUID()
     private var demo = false
     private var awaitingAcknowledgement = false
@@ -121,6 +125,8 @@ final class AssistantChatModel: ObservableObject {
     /// Called for backgrounding, leaving the tab, removing config or signing out.
     func pause() {
         generation = UUID()
+        identityTask?.cancel()
+        identityTask = nil
         connectionTask?.cancel()
         connectionTask = nil
         sendTask?.cancel()
@@ -136,8 +142,10 @@ final class AssistantChatModel: ObservableObject {
     }
 
     func pair(_ code: String) throws {
+        guard activeRunID == nil else { throw OpenClawError.directiveInProgress }
         let setup = try OpenClawSetupCode.parse(code)
         pause()
+        assistantName = "OpenClaw"
         self.setup = setup
         transcript = AssistantTranscript()
         errorMessage = nil
@@ -146,17 +154,53 @@ final class AssistantChatModel: ObservableObject {
     }
 
     func forget() {
+        guard activeRunID == nil else {
+            errorMessage = OpenClawError.directiveInProgress.localizedDescription
+            return
+        }
         pause()
         do {
             try store.forget()
             setup = nil
             gatewayHost = nil
+            gatewayAddress = nil
+            hasSavedGateway = false
+            assistantName = "OpenClaw"
             deviceID = nil
             transcript = AssistantTranscript()
             directive = nil
             errorMessage = nil
             state = .needsPairing
         } catch { errorMessage = OpenClawError.keychain.localizedDescription }
+    }
+
+    /// Settings can show the saved endpoint without opening a socket or microphone.
+    func refreshGatewayDetails() {
+        do {
+            let credential = try store.credential()
+            hasSavedGateway = credential != nil
+            gatewayAddress = credential?.gatewayURL
+            gatewayHost = credential.flatMap { URL(string: $0.gatewayURL)?.host }
+        } catch { errorMessage = OpenClawError.keychain.localizedDescription }
+    }
+
+    /// Explicitly confirmed by the user for the SAME gateway at a new address.
+    /// Preserve identity/token; never send a directive as part of reconnecting.
+    func changeGatewayAddress(_ input: String) throws {
+        guard activeRunID == nil else { throw OpenClawError.directiveInProgress }
+        let url = try OpenClawSetupCode.gatewayAddress(input)
+        guard let credential = try store.credential() else { throw OpenClawError.gatewayNotPaired }
+        let updated = OpenClawCredential(gatewayURL: url.absoluteString, token: credential.token, scopes: credential.scopes)
+        // A failed Keychain write must not tear down the working connection.
+        try store.save(updated)
+        pause()
+        setup = nil
+        assistantName = "OpenClaw"
+        gatewayAddress = url.absoluteString
+        gatewayHost = url.host
+        hasSavedGateway = true
+        errorMessage = nil
+        if let configuration { activate(configuration: configuration, demo: demo) }
     }
 
     func reconnect() {
@@ -253,6 +297,11 @@ final class AssistantChatModel: ObservableObject {
         while !Task.isCancelled, generation == id {
             do {
                 let credential = setup == nil ? try store.credential() : nil
+                if setup == nil {
+                    hasSavedGateway = credential != nil
+                    gatewayAddress = credential?.gatewayURL
+                    gatewayHost = credential.flatMap { URL(string: $0.gatewayURL)?.host }
+                }
                 guard setup != nil || credential != nil else {
                     state = .needsPairing
                     return
@@ -267,6 +316,8 @@ final class AssistantChatModel: ObservableObject {
                     guard generation == id, !Task.isCancelled else { return }
                     let paired = try OpenClawCredential.from(hello: hello, url: setup.url, bootstrap: true)
                     try store.save(paired)
+                    hasSavedGateway = true
+                    gatewayAddress = paired.gatewayURL
                     self.setup = nil
                     gateway.disconnect()
                     continue
@@ -280,12 +331,22 @@ final class AssistantChatModel: ObservableObject {
                     try store.save(OpenClawCredential.from(hello: hello, url: url, bootstrap: false))
                 }
                 state = .connected
+                // Cosmetic lookup only: never delay commands or require broader scopes.
+                assistantName = "OpenClaw"
+                identityTask?.cancel()
+                identityTask = Task { [weak self] in
+                    guard let self else { return }
+                    let identity = try? await gateway.assistantIdentity(configuration: configuration)
+                    guard generation == id, !Task.isCancelled else { return }
+                    assistantName = Self.displayName(from: identity)
+                }
                 attempts = 0
                 // No conversation history is fetched or rendered. Only this device's
                 // current directive may update the progress/result screen.
                 try await gateway.waitForDisconnect()
             } catch {
                 guard generation == id, !Task.isCancelled else { return }
+                identityTask?.cancel()
                 gateway.disconnect()
                 if activeRunID != nil {
                     markInterrupted()
@@ -308,6 +369,19 @@ final class AssistantChatModel: ObservableObject {
                 try? await Task.sleep(for: .seconds(delay))
             }
         }
+    }
+
+    static func displayName(from identity: [String: Any]?) -> String {
+        guard let identity, identity["agentId"] as? String == AssistantConfiguration.agentID,
+              let raw = identity["name"] as? String else { return "OpenClaw" }
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name.count <= 80,
+              name.rangeOfCharacter(from: .controlCharacters) == nil else { return "OpenClaw" }
+        return name
+    }
+
+    func displayText(_ text: String) -> String {
+        text.replacingOccurrences(of: "OpenClaw", with: assistantName)
     }
 
     private func receive(_ event: [String: Any]) {

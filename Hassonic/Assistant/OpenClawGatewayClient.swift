@@ -146,6 +146,10 @@ final class OpenClawGatewayClient {
         try await request("chat.history", params: Self.chatParams(configuration, extra: ["limit": 100]))
     }
 
+    func assistantIdentity(configuration: AssistantConfiguration) async throws -> Object {
+        try await request("agent.identity.get", params: Self.chatParams(configuration))
+    }
+
     func send(_ text: String, idempotencyKey: String, configuration: AssistantConfiguration) async throws -> Object {
         try await request("chat.send", params: Self.chatParams(configuration, extra: ["message": text, "idempotencyKey": idempotencyKey]))
     }
