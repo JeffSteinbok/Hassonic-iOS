@@ -80,6 +80,62 @@ struct FillImage: View {
     }
 }
 
+/// Album art drawn whole, never cropped or stretched. The image fits inside
+/// whatever frame it's given (callers give it a square); if the cover isn't
+/// square, e.g. a 16:9 video thumbnail, the bars either side are filled with a
+/// blurred, dimmed copy of the same image rather than cutting the cover down.
+struct LetterboxedArtwork: View {
+    let image: Image
+
+    var body: some View {
+        // Both layers are overlays on a view that takes exactly the offered
+        // frame. In a ZStack the overflowing fill layer would size the stack,
+        // and the "fit" layer would then fit that oversized box: cropped again.
+        Color.clear
+            .overlay {
+                image
+                    .resizable()
+                    .scaledToFill()
+                    .blur(radius: 18, opaque: true)
+                    .overlay(Color.black.opacity(0.25))
+            }
+            .overlay {
+                image
+                    .resizable()
+                    .scaledToFit()
+            }
+            .clipped()
+    }
+}
+
+/// A square album-art tile: the whole cover, letterboxed if it isn't square,
+/// with `placeholder` while it loads or when there's no art. Square from its
+/// width, so give it a width (or let it fill one) rather than a height.
+struct SquareArtwork<Placeholder: View>: View {
+    let url: URL?
+    var cornerRadius: CGFloat = 0
+    @ViewBuilder var placeholder: () -> Placeholder
+
+    var body: some View {
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                if let url {
+                    AsyncImage(url: url) { phase in
+                        if case .success(let image) = phase {
+                            LetterboxedArtwork(image: image)
+                        } else {
+                            placeholder()
+                        }
+                    }
+                } else {
+                    placeholder()
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+}
+
 private let thumbnailSize: CGFloat = 44
 
 /// Resolves and loads a Browse-node thumbnail, with the HA token only when
@@ -115,9 +171,7 @@ struct BrowseThumbnailImage: View {
         ZStack {
             switch phase {
             case .loaded(let image):
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
+                LetterboxedArtwork(image: image)
                     .frame(width: thumbnailSize, height: thumbnailSize)
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             default:

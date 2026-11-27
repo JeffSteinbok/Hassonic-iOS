@@ -117,16 +117,13 @@ struct RoomNowPlaying: View {
         if let speaker {
             let isPlaying = speaker.state == "playing"
             HStack(spacing: 12) {
-                AsyncImage(url: resolveHAImageURL(path: speaker.attributeString("entity_picture"), baseURLString: haClient.baseURLString)) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
+                SquareArtwork(url: resolveHAImageURL(path: speaker.attributeString("entity_picture"), baseURLString: haClient.baseURLString), cornerRadius: 8) {
                     Image(systemName: "music.note")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(.quaternary)
                 }
                 .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(speaker.attributeString("media_title") ?? "")
