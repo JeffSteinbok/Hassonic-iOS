@@ -211,6 +211,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--only", help="One screen by name: " + ", ".join(name for name, _, _ in SCREENS))
+    parser.add_argument("--appearance", choices=["light", "dark"], default="light")
+    parser.add_argument("--no-recents", action="store_true", help="Leave the Music tab's Recents row empty")
     parser.add_argument("--device", help="A simulator's UDID, instead of the first " + DEVICE)
     args = parser.parse_args()
 
@@ -231,14 +233,17 @@ def main():
     now = datetime.now(timezone.utc)
     (demo / "demo-entities.json").write_text(json.dumps(entities(now, (demo / "album.png").as_uri())))
     (demo / "demo-history.json").write_text(json.dumps(history(now)))
-    (demo / "demo-recents.json").write_text(json.dumps(recents(demo)))
+    (demo / "demo-recents.json").write_text(json.dumps([] if args.no_recents else recents(demo)))
     config = (DEMO / "demo-config.yaml").read_text().replace("{{DEMO}}", demo.as_uri())
     (documents / "config-override.yaml").write_text(config)
 
     # A clean status bar: 9:41, full signal and battery.
     run("xcrun", "simctl", "status_bar", device, "override", "--time", "9:41", "--batteryState", "charged",
         "--batteryLevel", "100", "--cellularBars", "4", "--wifiBars", "3")
-    run("xcrun", "simctl", "ui", device, "appearance", "light")
+    run("xcrun", "simctl", "ui", device, "appearance", args.appearance)
+    # A light, with-recents run writes the README's files; any other
+    # variant gets its own name beside them.
+    suffix = ("-dark" if args.appearance == "dark" else "") + ("-no-recents" if args.no_recents else "")
 
     OUT.mkdir(parents=True, exist_ok=True)
     for name, link, history_for in SCREENS:
@@ -251,7 +256,7 @@ def main():
         subprocess.run(["xcrun", "simctl", "launch", device, bundle], check=True, capture_output=True,
                        env={**__import__("os").environ, **environment})
         time.sleep(6)
-        path = OUT / f"{name}.png"
+        path = OUT / f"{name}{suffix}.png"
         # The simulator service may not write into a protected folder like
         # ~/Documents, so it captures to a temp file that's then moved in.
         with tempfile.TemporaryDirectory() as scratch:
