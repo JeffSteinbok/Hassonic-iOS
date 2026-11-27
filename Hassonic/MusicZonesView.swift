@@ -5,6 +5,7 @@ struct MusicZonesView: View {
     @Environment(\.openURL) private var openURL
     @State private var showingMediaBrowser = false
     @StateObject private var transitionManager = NowPlayingTransitionManager()
+    @ObservedObject private var recentStore = RecentMusicStore.shared
 
     @EnvironmentObject private var configuration: AppConfigurationLoader
 
@@ -81,10 +82,10 @@ struct MusicZonesView: View {
                         if let selectedAccount {
                             NowPlayingCard(entity: mediaEntity, presentation: transitionManager.committed, mediaEntityId: selectedAccount.entityId, accountDisplayName: selectedAccount.displayName, speakerClaim: configuration.speakerClaim, zones: selectedAccount.zones)
 
-                            if !selectedAccount.favorites.isEmpty {
-                                sectionHeader("Favorites")
+                            let recents = recentStore.items(for: selectedAccount.entityId)
+                            if !selectedAccount.favorites.isEmpty || !recents.isEmpty {
+                                FavoritesBar(mediaEntityId: selectedAccount.entityId, accountDisplayName: selectedAccount.displayName, speakerClaim: configuration.speakerClaim, favorites: selectedAccount.favorites, recents: recents, zones: selectedAccount.zones, hasMedia: hasMedia)
                                     .padding(.top, 8)
-                                FavoritesBar(mediaEntityId: selectedAccount.entityId, accountDisplayName: selectedAccount.displayName, speakerClaim: configuration.speakerClaim, favorites: selectedAccount.favorites, zones: selectedAccount.zones, hasMedia: hasMedia)
                             }
                         } else {
                             card {
@@ -174,11 +175,36 @@ struct MusicZonesView: View {
         .task {
             transitionManager.update(entity: mediaEntity, baseURLString: haClient.baseURLString)
         }
+        // The service's own "Recently played", each time the tab opens or
+        // the account or connection changes.
+        .task(id: RecentsRefreshKey(account: selectedAccount?.entityId, connected: haClient.connectionState == .connected)) {
+            await refreshRecents()
+        }
         .onChange(of: playbackAnchorIdentity(for: mediaEntity)) { _, _ in
             transitionManager.update(entity: mediaEntity, baseURLString: haClient.baseURLString)
         }
         .onChange(of: trackIdentity(for: mediaEntity)) { _, _ in
             transitionManager.update(entity: mediaEntity, baseURLString: haClient.baseURLString)
+        }
+    }
+
+    private struct RecentsRefreshKey: Equatable {
+        let account: String?
+        let connected: Bool
+    }
+
+    private func refreshRecents() async {
+        guard let account = selectedAccount?.entityId, haClient.connectionState == .connected else { return }
+        #if DEBUG && targetEnvironment(simulator)
+        // Demo mode has no socket to browse with.
+        if let demo = DemoMode.recents() {
+            recentStore.showDemo(demo, account: account)
+            return
+        }
+        #endif
+        let client = haClient
+        await recentStore.refreshFromService(account: account) { type, id in
+            await client.browseMedia(entityId: account, mediaContentType: type, mediaContentId: id)
         }
     }
 
@@ -322,6 +348,7 @@ struct MusicZonesView: View {
                 if node.isPlayable, let contentType = node.mediaContentType, let contentId = node.mediaContentId {
                     Button {
                         haClient.playMedia(entityId, contentType: contentType, contentId: contentId)
+                        RecentMusic.item(from: node).map { RecentMusicStore.shared.record($0, account: entityId) }
                     } label: {
                         Label("Play \(node.displayTitle)", systemImage: "play.fill")
                     }
@@ -366,6 +393,7 @@ struct MusicZonesView: View {
                 } else if node.isPlayable, let contentType = node.mediaContentType, let contentId = node.mediaContentId {
                     Button {
                         haClient.playMedia(entityId, contentType: contentType, contentId: contentId)
+                        RecentMusic.item(from: node).map { RecentMusicStore.shared.record($0, account: entityId) }
                     } label: {
                         nodeLabel(node)
                     }
