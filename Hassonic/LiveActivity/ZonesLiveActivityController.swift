@@ -1,4 +1,5 @@
 import ActivityKit
+import BackgroundTasks
 import Foundation
 import UIKit
 
@@ -6,6 +7,16 @@ import UIKit
 /// playing, keeps it in step with Home Assistant while the app is running,
 /// and carries out its button taps (which iOS delivers to this process, even
 /// launching it in the background to do so).
+///
+/// Ending it is the hard part, because nothing runs while the app is
+/// suspended. See `ZonesActivityLifecycle` for when it should go; this class
+/// makes that happen:
+/// - while running, `sync` ends it, re-checking when a pause's grace runs out;
+/// - before suspending (`willSuspend`), a paused one is ended with a dismissal
+///   date, which iOS honours without the app;
+/// - a playing one is left with a stale date, and a background refresh
+///   (`refreshInBackground`) checks on it when iOS allows;
+/// - at launch, any left stale by a killed app are cleared (`cleanUpStale`).
 @MainActor
 final class ZonesLiveActivityController {
     static let shared = ZonesLiveActivityController()
@@ -41,6 +52,19 @@ final class ZonesLiveActivityController {
     /// Play/pause as just tapped, until Home Assistant reports it or the
     /// window passes, so the button doesn't flick back meanwhile.
     private var optimisticPlaying: (isPlaying: Bool, at: Date)?
+    /// When this process first saw the account stop playing, for when Home
+    /// Assistant doesn't say (`last_changed`).
+    private var notPlayingSince: Date?
+    /// The last account `sync` was given, for the grace-period re-check.
+    private var lastAccount: MediaAccount?
+    private var recheckDeadline: Date?
+    private var recheckTask: Task<Void, Never>?
+
+    /// The app's background refresh task, listed in Info.plist's
+    /// BGTaskSchedulerPermittedIdentifiers.
+    nonisolated static var refreshTaskIdentifier: String {
+        (Bundle.main.bundleIdentifier ?? "Hassonic") + ".liveActivityRefresh"
+    }
 
     /// Nil for the shared client. (A `.shared` default argument would be
     /// evaluated off the main actor.)
@@ -50,21 +74,37 @@ final class ZonesLiveActivityController {
 
     private var activities: [ZonesActivity] { ZonesActivity.activities }
 
+    /// Still on screen and still updatable. A stale activity counts: it's
+    /// the same one, just overdue an update.
+    private var liveActivities: [ZonesActivity] {
+        activities.filter { ($0.activityState == .active || $0.activityState == .stale) && !endingIds.contains($0.id) }
+    }
+
     // MARK: - Keeping in step with Home Assistant
 
     /// Called whenever entity state, the config or the selected account
     /// changes. Cheap when nothing relevant moved: it only talks to ActivityKit
     /// when the content would actually differ.
     func sync(account: MediaAccount?) {
+        lastAccount = account
         for activity in activities where activity.attributes.accountEntityId != account?.entityId {
             end(activity)
         }
         guard let account else { return }
+        // No states yet (launching, or signed out) says nothing about
+        // playback, so leave the activity be rather than end it.
+        guard client.connectionState == .connected, !client.entities.isEmpty else { return }
 
         let accountEntity = client.entity(account.entityId)
-        guard ZonesActivityContent.hasMedia(accountEntity) else {
+        let now = Date()
+        let playback = playbackHonouringTap(ZonesActivityLifecycle.playback(of: accountEntity), now: now)
+        let decision = ZonesActivityLifecycle.decision(
+            playback, notPlayingSince: notPlayingSince(accountEntity, playback: playback, now: now), now: now
+        )
+        scheduleRecheck(decision)
+        if decision == .end {
             dismissedByUser = false
-            activities.forEach(end)
+            activities.forEach { end($0) }
             return
         }
 
@@ -81,7 +121,7 @@ final class ZonesLiveActivityController {
             }
         }
 
-        if let current = activities.first(where: { $0.activityState == .active && !endingIds.contains($0.id) }) {
+        if let current = liveActivities.first {
             // One left over from before a relaunch still needs watching, or
             // swiping it away wouldn't stick.
             observe(current)
@@ -94,25 +134,163 @@ final class ZonesLiveActivityController {
             Task { await update(current, to: state) }
         } else {
             guard !dismissedByUser,
-                  accountEntity?.state == "playing",
-                  UIApplication.shared.applicationState == .active,
-                  ActivityAuthorizationInfo().areActivitiesEnabled else { return }
-            start(account: account, state: state)
+                  playback == .playing,
+                  UIApplication.shared.applicationState == .active else { return }
+            start(ZonesActivityAttributes(
+                accountEntityId: account.entityId,
+                accountName: account.displayName,
+                quickZones: ZonesActivityContent.quickZones(for: account) { client.entity($0)?.isAvailable == true }
+            ), state: state)
         }
     }
 
-    private func start(account: MediaAccount, state: ContentState) {
-        let attributes = ZonesActivityAttributes(
-            accountEntityId: account.entityId,
-            accountName: account.displayName,
-            quickZones: ZonesActivityContent.quickZones(for: account) { client.entity($0)?.isAvailable == true }
-        )
+    private func start(_ attributes: ZonesActivityAttributes, state: ContentState) {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        // One ended before suspending may still be on screen; it can't be
+        // updated, so it makes way for the new one.
+        for leftover in activities where !liveActivities.contains(where: { $0.id == leftover.id }) {
+            Task { await leftover.end(nil, dismissalPolicy: .immediate) }
+        }
         do {
             let activity = try ZonesActivity.request(attributes: attributes, content: content(state), pushType: nil)
             lastUpdate[activity.id] = Date()
             observe(activity)
         } catch {
             Log.liveActivity.note("start failed — \(error.localizedDescription)")
+        }
+    }
+
+    /// A play/pause tap is trusted over Home Assistant until it catches up.
+    private func playbackHonouringTap(_ playback: ZonesActivityLifecycle.Playback, now: Date) -> ZonesActivityLifecycle.Playback {
+        guard let held = optimisticPlaying,
+              now.timeIntervalSince(held.at) <= Self.optimisticPlayingWindow else { return playback }
+        if held.isPlaying { return .playing }
+        return playback == .stopped ? .stopped : .paused
+    }
+
+    /// When the pause's grace period started.
+    private func notPlayingSince(_ entity: HAEntityState?, playback: ZonesActivityLifecycle.Playback, now: Date) -> Date {
+        guard playback != .playing else {
+            notPlayingSince = nil
+            return now
+        }
+        if notPlayingSince == nil { notPlayingSince = now }
+        // A pause just tapped: Home Assistant's last_changed is still the
+        // moment it started playing.
+        if let held = optimisticPlaying, !held.isPlaying,
+           now.timeIntervalSince(held.at) <= Self.optimisticPlayingWindow {
+            return held.at
+        }
+        guard ZonesActivityLifecycle.playback(of: entity) != .playing else { return notPlayingSince ?? now }
+        return ZonesActivityLifecycle.notPlayingSince(entity, fallback: notPlayingSince ?? now)
+    }
+
+    /// A paused player sends no further updates, so nothing would call
+    /// `sync` when its grace period runs out; this does.
+    private func scheduleRecheck(_ decision: ZonesActivityLifecycle.Decision) {
+        guard case .keepUntil(let deadline) = decision else {
+            recheckTask?.cancel()
+            recheckTask = nil
+            recheckDeadline = nil
+            return
+        }
+        guard deadline != recheckDeadline else { return }
+        recheckTask?.cancel()
+        recheckDeadline = deadline
+        recheckTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow) + 1))
+            guard !Task.isCancelled, let self else { return }
+            self.recheckDeadline = nil
+            self.recheckTask = nil
+            self.sync(account: self.lastAccount)
+        }
+    }
+
+    // MARK: - While the app isn't running
+
+    /// Call when the app is about to stop running: gone to the background, or
+    /// a button tap handled while it's there. Nothing watches Home Assistant
+    /// until it's next woken, so a paused activity is ended now with its
+    /// grace period as the dismissal date, which iOS carries out on its own.
+    /// A playing one stays, with a background refresh booked to check on it.
+    func willSuspend() {
+        let now = Date()
+        var anyPlaying = false
+        for activity in liveActivities {
+            let state = activity.content.state
+            if state.isPlaying {
+                anyPlaying = true
+                continue
+            }
+            let entity = client.entity(activity.attributes.accountEntityId)
+            let since = notPlayingSince(entity, playback: .paused, now: now)
+            let policy: ActivityUIDismissalPolicy
+            switch ZonesActivityLifecycle.decision(.paused, notPlayingSince: since, now: now) {
+            case .keepUntil(let deadline): policy = .after(deadline)
+            case .keep, .end: policy = .immediate
+            }
+            end(activity, finalState: state, dismissalPolicy: policy)
+        }
+        if anyPlaying { scheduleBackgroundRefresh() }
+    }
+
+    /// Ends what a killed app left behind: activities nobody has updated
+    /// since their stale date, and any beyond the first. If the music is
+    /// still going, `sync` starts a fresh one once connected. For a launch
+    /// into the foreground only — a background launch is iOS delivering a tap
+    /// on that very activity, or a refresh that checks on it properly.
+    func cleanUpStale(now: Date = Date()) {
+        var kept = false
+        for activity in liveActivities {
+            let isStale = activity.activityState == .stale || (activity.content.staleDate.map { $0 <= now } ?? false)
+            if isStale || kept {
+                end(activity)
+            } else {
+                kept = true
+            }
+        }
+    }
+
+    /// A background refresh: asks Home Assistant whether the activity is
+    /// still playing and ends it if not. If Home Assistant can't be reached
+    /// and the activity has already gone stale, it ends too — it can no
+    /// longer be kept accurate.
+    func refreshInBackground() async {
+        guard let activity = liveActivities.first else { return }
+        let accountEntityId = activity.attributes.accountEntityId
+        let now = Date()
+        guard await ensureConnected(accountEntityId: accountEntityId) else {
+            if activity.activityState == .stale || (activity.content.staleDate.map { $0 <= now } ?? false) {
+                end(activity)
+            } else {
+                scheduleBackgroundRefresh()
+            }
+            return
+        }
+        let entity = client.entity(accountEntityId)
+        let playback = ZonesActivityLifecycle.playback(of: entity)
+        let decision = ZonesActivityLifecycle.decision(
+            playback, notPlayingSince: notPlayingSince(entity, playback: playback, now: now), now: now
+        )
+        guard decision != .end else {
+            dismissedByUser = false
+            end(activity)
+            return
+        }
+        var state = activity.content.state
+        state.isPlaying = playback == .playing
+        state.message = nil
+        await update(activity, to: state)
+        willSuspend()
+    }
+
+    private func scheduleBackgroundRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: Self.refreshTaskIdentifier)
+        request.earliestBeginDate = Date().addingTimeInterval(Self.staleAfter)
+        do {
+            try BGTaskScheduler.shared.submit(request)
+        } catch {
+            Log.liveActivity.note("refresh not scheduled — \(error.localizedDescription)")
         }
     }
 
@@ -130,9 +308,10 @@ final class ZonesLiveActivityController {
         }
     }
 
-    private func end(_ activity: ZonesActivity) {
+    private func end(_ activity: ZonesActivity, finalState: ContentState? = nil, dismissalPolicy: ActivityUIDismissalPolicy = .immediate) {
         guard endingIds.insert(activity.id).inserted else { return }
-        Task { await activity.end(nil, dismissalPolicy: .immediate) }
+        let finalContent = finalState.map(content)
+        Task { await activity.end(finalContent, dismissalPolicy: dismissalPolicy) }
     }
 
     private func forget(_ id: String) {
@@ -186,21 +365,37 @@ final class ZonesLiveActivityController {
     }
 
     /// Shows the new state at once; Home Assistant's own update follows.
+    ///
+    /// A pause tapped from the Lock Screen keeps the activity up for the
+    /// grace period. If the app is in the background, `willSuspend` hands that
+    /// to iOS by ending the activity with a dismissal date; play tapped on it
+    /// within that time starts a fresh one in its place.
     func togglePlayback(activityId: String) async {
         guard let activity = activities.first(where: { $0.id == activityId }) else { return }
         let accountEntityId = activity.attributes.accountEntityId
+        let isLive = liveActivities.contains { $0.id == activityId }
 
         var state = activity.content.state
         guard await ensureConnected(accountEntityId: accountEntityId) else {
             state.message = "Couldn't reach Home Assistant"
-            await update(activity, to: state)
+            if isLive { await update(activity, to: state) }
             return
         }
         client.mediaPlayPause(accountEntityId)
         state.isPlaying.toggle()
         optimisticPlaying = (state.isPlaying, Date())
         state.message = nil
-        await update(activity, to: state)
+        if isLive {
+            await update(activity, to: state)
+        } else if state.isPlaying {
+            // Ended at its last pause, so it can't change; a LiveActivityIntent
+            // may start its replacement even from the background.
+            dismissedByUser = false
+            start(activity.attributes, state: state)
+        }
+        if UIApplication.shared.applicationState != .active {
+            willSuspend()
+        }
     }
 
     func setVolume(to level: Double, activityId: String) async {

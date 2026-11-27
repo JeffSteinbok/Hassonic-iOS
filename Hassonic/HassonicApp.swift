@@ -1,3 +1,4 @@
+import BackgroundTasks
 import SwiftUI
 import UserNotifications
 import UIKit
@@ -63,6 +64,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        registerLiveActivityRefresh()
+        // A background launch is iOS delivering a Live Activity tap or a
+        // refresh; only a launch the person made clears what a killed app
+        // left on the Lock Screen.
+        if application.applicationState != .background {
+            ZonesLiveActivityController.shared.cleanUpStale()
+        }
+
         guard let configuration = FirebaseConfiguration.load() else {
             Log.push.note("Firebase configuration is missing or invalid; push notifications are disabled.")
             return true
@@ -71,6 +80,17 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         FirebaseApp.configure(options: configuration)
         isFirebaseConfigured = true
         return true
+    }
+
+    /// Must be registered before launch finishes.
+    private func registerLiveActivityRefresh() {
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: ZonesLiveActivityController.refreshTaskIdentifier, using: .main) { task in
+            let work = Task { @MainActor in
+                await ZonesLiveActivityController.shared.refreshInBackground()
+                task.setTaskCompleted(success: !Task.isCancelled)
+            }
+            task.expirationHandler = { work.cancel() }
+        }
     }
 
     /// The scene delegate only catches app-icon quick actions; SwiftUI does
@@ -277,6 +297,7 @@ struct HassonicApp: App {
                 case .background:
                     assistant.pause()
                     wasBackgrounded = true
+                    ZonesLiveActivityController.shared.willSuspend()
                 case .active where wasBackgrounded:
                     wasBackgrounded = false
                     Task {

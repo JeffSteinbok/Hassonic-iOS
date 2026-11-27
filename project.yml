@@ -97,6 +97,11 @@ targets:
         HAOAuthClientID: "$(HA_OAUTH_CLIENT_ID)"
         UIBackgroundModes:
           - remote-notification
+          # The background refresh that ends a speaker Live Activity once
+          # the music has stopped while the app was away.
+          - fetch
+        BGTaskSchedulerPermittedIdentifiers:
+          - $(PRODUCT_BUNDLE_IDENTIFIER).liveActivityRefresh
         NSSupportsLiveActivities: true
         # What a page shortcut saved through Add to Siri runs.
         NSUserActivityTypes:

@@ -39,13 +39,39 @@ Everything else in this doc is about whether those two are worth the cost.
   household's.
 - iOS removes an activity after about 8 hours whatever we do.
 
+## How the card goes away
+
+Ending the card has the same problem as updating it: once the app is
+suspended, nothing sees the music stop. `ZonesActivityLifecycle` decides,
+and `ZonesLiveActivityController` carries it out:
+
+- **Playing** keeps the card.
+- **Paused** (or idle with a track loaded) keeps it for a 2-minute grace
+  period, so a pause from the card's own key doesn't make it disappear. The
+  period starts at Home Assistant's `last_changed`, so it survives a relaunch.
+- **Off, unavailable, standby, or nothing loaded** ends it at once.
+
+Here's what happens in each case:
+
+| Situation | What ends the card |
+| --- | --- |
+| App open | `sync` on every state change, plus a timer for when a pause's grace period runs out (a paused player sends no further updates) |
+| App goes to the background while paused, or the card's pause key is tapped from the Lock Screen | The card is ended right away with `dismissalPolicy: .after(grace deadline)`; iOS removes it on time with no app running. Play tapped in that window starts a fresh card from the intent |
+| App goes to the background while playing | The card keeps a 15-minute stale date. A `BGAppRefreshTask` booked for then reconnects and ends it if playback has stopped (or if Home Assistant can't be reached and the card is already stale). iOS decides when that runs |
+| App was killed | On the next launch into the foreground, cards past their stale date (and any duplicates) are ended; `sync` starts a fresh one if music is still playing |
+
+Only a push (C or D below) can end a card *promptly* when music that was
+playing stops while the app is away. Until then, the stale date and background
+refresh are the backstop.
+
 ## Approaches
 
 ### A. Local only (shipped in #113)
 
 The app runs everything. It starts the card when the selected account
 starts playing while the app is open, keeps it in step with Home Assistant
-while the app runs, and ends it when playback stops. If the card goes 15
+while the app runs, and ends it when playback stops (see
+above). If the card goes 15
 minutes with no update, it shows "May be out of date. Open the app to refresh."
 
 | Pros | Cons |
@@ -144,6 +170,8 @@ billing plan, and the Live Activity sender would still have to be written.
 2. **If staleness turns out to matter in practice, go to D, not C.** It
    gives the same result with no YAML or restart, and lays the path for
    real notifications later.
-3. B isn't worth building: the timing is too unreliable to change how the
-   card feels.
+3. B isn't worth building to keep the card *accurate*: the timing is too
+   unreliable to change how the card feels. It is used as a backstop for
+   *ending* a card the app can no longer vouch for (see
+   [How the card goes away](#how-the-card-goes-away)).
 
