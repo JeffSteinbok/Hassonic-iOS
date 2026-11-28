@@ -10,6 +10,8 @@ import Foundation
 /// - `demo-recents.json`: the Music tab's Recents, as `RecentMusicItem`s.
 /// - `demo-history.json`: `{ "person.x": [states…] }`, what the People
 ///   card's history sheet reads.
+/// - `demo-timeline.json`: LLM Vision's `{ "events": [...] }`, what the
+///   Security timeline shows; key frames are file URLs.
 ///
 /// The dashboard itself comes in as the usual debug override,
 /// `config-override.yaml`. Debug simulator builds only.
@@ -69,6 +71,20 @@ enum DemoMode {
         guard let directory,
               let data = try? Data(contentsOf: directory.appendingPathComponent("demo-recents.json")) else { return nil }
         return try? JSONDecoder().decode([RecentMusicItem].self, from: data)
+    }
+
+    /// `demo-timeline.json`: the Security timeline's events, newest first.
+    static func timeline() -> [LLMVisionEvent]? {
+        guard let directory,
+              let data = try? Data(contentsOf: directory.appendingPathComponent("demo-timeline.json")),
+              let response = try? decoder.decode(LLMVisionTimelineResponse.self, from: data) else { return nil }
+        return response.events.sorted { ($0.startDate ?? .distantPast) > ($1.startDate ?? .distantPast) }
+    }
+
+    /// HASSONIC_OPEN_EVENT: an LLM Vision event uid whose detail opens with
+    /// the Security timeline.
+    static var openEvent: String? {
+        ProcessInfo.processInfo.environment["HASSONIC_OPEN_EVENT"]
     }
 
     static func history(for entityId: String) -> [HAEntityState]? {
