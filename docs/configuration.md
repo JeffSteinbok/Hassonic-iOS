@@ -124,6 +124,7 @@ must be an SF Symbols name.
 ```yaml
 - type: tv_remote
   title: Family Room
+  box_sources: [Comcast]             # TV source names for the cable box
   tv:
     kind: samsung
     remote: remote.family_room_samsung_tv
@@ -144,6 +145,18 @@ must be an SF Symbols name.
 | `name` | Optional; the panel's label. Defaults to "Samsung TV" or "Xfinity". |
 | `power` | Optional `script.*` the power key runs instead of sending the device's own power command. For a Samsung, whose network remote can turn it off but not on, point it at a script that sends the TV's IR power code through an IR blaster such as a Broadlink. |
 | `favorites` | Optional, `xfinity` only. Saved voice commands, offered by the ★ key beside the box panel's voice key: each a `name` for the menu, what to `say`, and an optional SF Symbol `icon`. |
+
+At the card level, optional `box_sources` lists the TV's source labels that show
+the box (for example a renamed HDMI input called `Comcast`). Matching ignores
+case and surrounding whitespace. These labels always take precedence over app
+detection. Without it, standard inputs and unknown or renamed sources still
+keep the box controls usable. A source appearing in `source_list` alone is not
+proof that it is an app.
+
+The box panel is disabled only when the TV is known to be off, showing a
+recognized built-in app, or Home Assistant is disconnected. A visible caption
+explains why (for example, "TV is showing Netflix"). Uncertain TV state never
+disables an otherwise connected remote.
 
 Each device gets its own panel and its keys always go to that device: the `tv`
 panel is drawn like the Samsung remote, the `box` panel like the X1. Either can

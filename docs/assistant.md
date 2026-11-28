@@ -22,6 +22,17 @@ Without this block there is no Assistant microphone, no gateway
 connection and no Assistant Keychain access. `assistant` becomes a reserved
 page ID while Assistant is enabled.
 
+The assistant's displayed name is fetched after authentication using
+`agent.identity.get` with the pinned `hassonic` agent and its session key.
+It is not carried by the pairing code and is not hardcoded to any owner's
+name. For example, a gateway identity named Octo displays Octo in the directive
+sheet, gateway settings, progress, errors and microphone accessibility label.
+The display falls back to OpenClaw before the lookup or if the gateway denies
+or does not support it. This optional lookup never blocks commands or requests
+additional scopes. The legacy YAML `title` field remains accepted but does not
+override the gateway-provided assistant name. Names are refreshed on reconnect
+and cleared when forgetting or replacing a gateway.
+
 The gateway must actually have an agent named `hassonic`; pinning its name in
 the app does not create it. Give it its own workspace and an appropriate tool
 policy. An absent agent is shown as "Not sent", not a connection interruption.
@@ -45,7 +56,13 @@ On the gateway host:
 openclaw qr --limited --setup-code-only --url wss://your-gateway.example
 ```
 
-Tap the microphone, paste that setup code, and tap Connect. Treat the code as a
+Open Settings, then the assistant's Gateway entry. Scan a limited pairing QR
+code (generated without `--setup-code-only`) or paste that setup code. Check the
+displayed gateway address, then tap Connect gateway. Scanning never pairs or
+sends a directive automatically. Camera permission is requested only when you
+tap Scan QR code; paste remains available if camera access is denied or scanning
+is unsupported. The microphone's unpaired screen also links to Gateway
+Settings. Treat the code as a
 secret. Depending on the gateway's mobile pairing policy, the code itself
 authorizes pairing or the owner must approve the pending request:
 
@@ -59,6 +76,21 @@ Ed25519 device key and the issued operator credential in its own Keychain
 service, with `AfterFirstUnlockThisDeviceOnly` accessibility and no iCloud
 sync. Debug and Release have separate identities. It does not store your
 shared gateway token or the temporary node credential.
+
+### Change the gateway address
+
+For the same trusted gateway at a new hostname, open Settings → the assistant's
+Gateway entry, edit the address under "Gateway moved?", and tap "Save address &
+reconnect". Bare hostnames, HTTPS and WSS addresses are accepted and normalized
+to WSS. Confirm the exact destination: the existing device credential will be
+sent there. Your device identity and pairing are preserved; no directive is sent.
+
+For a different gateway, use "Pair a different gateway" and a fresh limited setup
+code instead. The saved pairing is replaced only after the new bootstrap succeeds.
+"Forget gateway" removes the local pairing and immediately shows the setup-code
+form on the same screen; it does not revoke the device on the server. These
+changes are disabled while a directive is running. Gateway setup never opens
+the microphone or automatically sends a command.
 
 OpenClaw's mobile setup protocol initially connects as a node with no
 capabilities, commands or requested scopes, then hands over an operator

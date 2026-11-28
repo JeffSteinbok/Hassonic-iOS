@@ -12,8 +12,7 @@ struct AssistantView: View {
     @State private var wantsRecording = false
     @State private var isStarting = false
     @State private var recordingTask: Task<Void, Never>?
-    @State private var setupCode = ""
-    @State private var pairingError: String?
+    @State private var showingGatewaySettings = false
     @State private var isCancelling = false
     @State private var confirmingNewDirective = false
     @State private var captureError: String?
@@ -30,8 +29,11 @@ struct AssistantView: View {
                 .frame(maxWidth: 600, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
-            .navigationTitle(configuration.title)
+            .navigationTitle(model.assistantName)
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(isPresented: $showingGatewaySettings) {
+                AssistantGatewaySettingsView(configuration: configuration)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(model.directive == nil ? "Cancel" : "Close") {
@@ -103,12 +105,12 @@ struct AssistantView: View {
             } else if !isStarting, model.state == .connected {
                 retryRecording
             }
-            if let error = captureError ?? model.errorMessage { Text(error).foregroundStyle(.red) }
+            if let error = captureError ?? model.errorMessage { Text(model.displayText(error)).foregroundStyle(.red) }
             if model.state == .disconnected {
                 Button("Reconnect") { model.reconnect() }.buttonStyle(.borderedProminent)
             }
             if model.state == .waitingForApproval {
-                Text("Approve this device on the OpenClaw gateway to continue.").foregroundStyle(.secondary)
+                Text("Approve this device on the \(model.assistantName) gateway to continue.").foregroundStyle(.secondary)
             }
         }
     }
@@ -167,14 +169,14 @@ struct AssistantView: View {
                         .foregroundStyle(directive.status == .completed ? Color.green : Color.orange)
                         .font(.title2)
                 }
-                Text(directive.progress).font(.title2.bold()).accessibilityIdentifier("assistant.status")
+                Text(model.displayText(directive.progress)).font(.title2.bold()).accessibilityIdentifier("assistant.status")
             }
             Text(directive.text).foregroundStyle(.secondary)
             if !directive.response.isEmpty {
                 Text((try? AttributedString(markdown: directive.response, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(directive.response))
                     .textSelection(.enabled)
             }
-            if let error = model.errorMessage { Text(error).foregroundStyle(.red) }
+            if let error = model.errorMessage { Text(model.displayText(error)).foregroundStyle(.red) }
             if directive.status == .running {
                 Button(isCancelling ? "Stopping…" : "Stop", role: .destructive) {
                     isCancelling = true
@@ -211,23 +213,15 @@ struct AssistantView: View {
 
     private var pairingView: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Connect once").font(.title2.bold())
-            Text("Paste a limited OpenClaw setup code to connect this device.").foregroundStyle(.secondary)
-            SecureField("Setup code", text: $setupCode)
-                .textInputAutocapitalization(.never).autocorrectionDisabled()
-                .textFieldStyle(.roundedBorder).privacySensitive()
-                .accessibilityIdentifier("assistant.setupCode")
-            HStack {
-                PasteButton(payloadType: String.self) { setupCode = $0.first ?? "" }
-                Spacer()
-                Button("Connect") {
-                    do { try model.pair(setupCode); setupCode = ""; pairingError = nil }
-                    catch { pairingError = error.localizedDescription }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(setupCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Text("Connect \(model.assistantName)").font(.title2.bold())
+            Text("Set up or change your \(model.assistantName) gateway in Gateway Settings.").foregroundStyle(.secondary)
+            Button("Gateway Settings") {
+                wantsRecording = false
+                showingGatewaySettings = true
             }
-            if let error = pairingError ?? model.errorMessage { Text(error).foregroundStyle(.red) }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("assistant.gatewaySettings")
+            if let error = model.errorMessage { Text(model.displayText(error)).foregroundStyle(.red) }
         }
     }
 }
@@ -235,21 +229,20 @@ struct AssistantView: View {
 struct AssistantSettingsSection: View {
     let configuration: AssistantConfiguration
     @EnvironmentObject private var model: AssistantChatModel
-    @State private var confirmingForget = false
 
     var body: some View {
-        Section("Assistant") {
-            LabeledContent("Agent", value: configuration.agent)
-            if let host = model.gatewayHost { LabeledContent("Gateway", value: host) }
-            if let deviceID = model.deviceID {
-                LabeledContent("Device") { Text(deviceID).font(.caption.monospaced()).textSelection(.enabled) }
-            }
-            Button("Forget gateway", role: .destructive) { confirmingForget = true }
-                .confirmationDialog("Forget this gateway?", isPresented: $confirmingForget, titleVisibility: .visible) {
-                    Button("Forget gateway", role: .destructive) { model.forget() }
-                } message: {
-                    Text("This removes the connection and device key from this app. The gateway owner can also revoke the device on the server.")
+        Section(model.assistantName) {
+            NavigationLink {
+                AssistantGatewaySettingsView(configuration: configuration)
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(model.assistantName) Gateway")
+                    Text(model.gatewayHost ?? "Connect \(model.assistantName)")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
+            }
+            .accessibilityIdentifier("assistant.gatewaySettings")
         }
+        .task { model.refreshGatewayDetails() }
     }
 }

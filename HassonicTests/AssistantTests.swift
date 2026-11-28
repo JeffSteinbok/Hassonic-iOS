@@ -255,8 +255,9 @@ final class OpenClawGatewayTests: XCTestCase {
 @MainActor
 final class FakeOpenClawStore: OpenClawCredentialStoring {
     var reads = 0
+    private let storedIdentity = try! OpenClawIdentity()
     var saved: OpenClawCredential? = OpenClawCredential(gatewayURL: "wss://gateway.example", token: "test-token", scopes: OpenClawCredential.chatScopes)
-    func identity() throws -> OpenClawIdentity { reads += 1; return try OpenClawIdentity() }
+    func identity() throws -> OpenClawIdentity { reads += 1; return storedIdentity }
     func credential() throws -> OpenClawCredential? { reads += 1; return saved }
     func save(_ credential: OpenClawCredential) throws { saved = credential }
     func forget() throws { saved = nil }
