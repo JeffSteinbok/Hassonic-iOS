@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hassonic Watch Mockups</title>
+<!--
+  Source for the PNGs in docs/watch/. Each board is one image: open
+  mockups.html#<board> to see it, and run docs/watch/render.sh to re-render
+  them all. Sizes are watch points: 41mm 176×215, 45mm 198×242, 49mm 205×251.
+  Content and names come from steinbokhome.yaml.
+-->
+<style>
+  :root {
+    --bg: #f2f1ee; --ink: #1d1d1f; --ink2: #6e6e73;
+    --accent: #ff9f0a;   /* watch tint: the phone's warm music palette */
+    --green: #30d158; --red: #ff453a; --blue: #0a84ff;
+    --glass: rgba(255,255,255,.16); --glass2: rgba(255,255,255,.10);
+    --label2: rgba(235,235,245,.6);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink);
+         font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif; }
+  .board { display: none; padding: 28px 32px 30px; }
+  .board.on { display: block; }
+  .board h1 { font: 700 22px/1.2 -apple-system, sans-serif; letter-spacing: -.01em; }
+  .board .sub { color: var(--ink2); font-size: 14px; margin-top: 4px; max-width: 980px; }
+  .row { display: flex; gap: 30px; align-items: flex-start; margin-top: 22px; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .cap { font-size: 13px; color: var(--ink2); text-align: center; max-width: 230px; line-height: 1.35; }
+  .cap b { color: var(--ink); font-weight: 600; }
+  .arrow { align-self: center; color: var(--ink2); font-size: 13px; text-align: center; width: 70px; line-height: 1.3; }
+  .arrow .a { font-size: 26px; color: #b0aea8; display: block; }
+
+  /* The watch: a case with the screen inside. */
+  .watch { position: relative; padding: 9px; border-radius: calc(var(--r) + 9px);
+           background: linear-gradient(145deg, #3a3a3c, #121214); box-shadow: 0 10px 28px rgba(0,0,0,.22); }
+  .watch::after { /* the crown */
+    content: ""; position: absolute; right: -5px; top: 26%; width: 7px; height: 30px;
+    border-radius: 3px; background: linear-gradient(90deg, #2c2c2e, #636366); }
+  .watch.crowned::after { background: linear-gradient(90deg, #8a5a00, var(--accent)); }
+  .screen { position: relative; width: var(--w); height: var(--h); border-radius: var(--r);
+            background: #000; color: #fff; overflow: hidden; font-size: calc(var(--s) * 15px); }
+  .clock { position: absolute; top: calc(var(--s) * 8px); right: calc(var(--s) * 14px);
+           font-weight: 600; font-size: 1em; z-index: 5; }
+  .navtitle { position: absolute; top: calc(var(--s) * 8px); left: calc(var(--s) * 16px);
+              font-weight: 600; color: var(--accent); z-index: 5; font-size: 1em;
+              display: flex; align-items: center; gap: .25em; }
+  .pad { position: absolute; inset: calc(var(--s) * 34px) calc(var(--s) * 10px) calc(var(--s) * 8px); }
+  .dots { position: absolute; right: calc(var(--s) * 3px); top: 50%; transform: translateY(-50%);
+          display: flex; flex-direction: column; gap: 3px; z-index: 6; }
+  .dots i { width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,.35); display: block; }
+  .dots i.on { background: #fff; height: 9px; border-radius: 2px; }
+  .glassbtn { width: calc(var(--s) * 38px); height: calc(var(--s) * 38px); border-radius: 50%;
+              background: var(--glass); display: grid; place-items: center;
+              box-shadow: inset 0 .5px 0 rgba(255,255,255,.35); }
+  .toolbar { position: absolute; left: calc(var(--s) * 12px); right: calc(var(--s) * 12px);
+             bottom: calc(var(--s) * 10px); display: flex; justify-content: space-between; align-items: center; z-index: 5; }
+  .pill { border-radius: 999px; background: var(--glass2); padding: .32em .7em; font-size: .78em;
+          display: inline-flex; align-items: center; gap: .35em; white-space: nowrap; }
+  .t1 { font-weight: 600; font-size: 1.08em; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .t2 { color: var(--label2); font-size: .86em; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .listrow { background: #1c1c1e; border-radius: calc(var(--s) * 14px); padding: .5em .65em;
+             display: flex; align-items: center; gap: .55em; margin-bottom: calc(var(--s) * 5px); }
+  .listrow .grow { flex: 1; min-width: 0; }
+  .listrow.sel { box-shadow: 0 0 0 2px var(--green) inset; }
+  .sec { color: var(--label2); font-size: .72em; font-weight: 600; letter-spacing: .04em;
+         text-transform: uppercase; margin: .55em .3em .35em; }
+  .bar { height: 4px; border-radius: 2px; background: rgba(255,255,255,.22); position: relative; overflow: hidden; }
+  .bar > b { position: absolute; left: 0; top: 0; bottom: 0; background: #fff; border-radius: 2px; }
+  .art { border-radius: 8px; flex: none; }
+  .sunset { background: linear-gradient(180deg, #f7a65a 0%, #d98872 45%, #6b3550 80%, #2c1830 100%); position: relative; overflow: hidden; }
+  .sunset::after { content: ""; position: absolute; left: 22%; top: 30%; width: 56%; height: 56%; border-radius: 50%;
+                   background: linear-gradient(180deg, #ffe7a3 55%, #8a6f4d 100%); opacity: .95; }
+  .acoustic { background: linear-gradient(135deg, #e9c46a, #8a5a2b); }
+  .tay { background: linear-gradient(135deg, #b9a7d9, #5b4a8a); }
+  .sotw { background: linear-gradient(135deg, #5fa8d3, #1b4965); }
+  .lake { background: linear-gradient(135deg, #8ecae6, #219ebc 60%, #023047); }
+  .key { border-radius: calc(var(--s) * 14px); background: #2c2c2e; display: grid; place-items: center; }
+  .round { border-radius: 50%; }
+  .grid { display: grid; gap: calc(var(--s) * 6px); }
+  .lbl { font-size: .62em; color: var(--label2); text-align: center; margin-top: 2px; }
+
+  /* Phone (settings mock) */
+  .phone { width: 300px; height: 620px; border-radius: 44px; background: #000; padding: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.22); }
+  .pscreen { width: 100%; height: 100%; border-radius: 35px; background: #f2f2f7; overflow: hidden; color: #000; font-size: 13px; position: relative; }
+  .pstatus { height: 34px; display: flex; justify-content: space-between; align-items: center; padding: 0 26px; font-weight: 600; font-size: 13px; }
+  .pnav { padding: 2px 16px 8px; display: flex; align-items: center; gap: 6px; }
+  .pnav .back { color: var(--blue); font-size: 15px; }
+  .ptitle { font: 700 24px/1.1 -apple-system, sans-serif; padding: 0 16px 10px; }
+  .psec { color: #6d6d72; font-size: 11px; text-transform: uppercase; letter-spacing: .02em; padding: 10px 28px 5px; }
+  .pgroup { background: #fff; border-radius: 11px; margin: 0 14px; overflow: hidden; }
+  .prow { display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-bottom: .5px solid #e5e5ea; min-height: 34px; }
+  .prow:last-child { border-bottom: 0; }
+  .prow .grow { flex: 1; }
+  .prow .val { color: #8e8e93; }
+  .pfoot { color: #6d6d72; font-size: 11px; padding: 5px 28px 0; line-height: 1.3; }
+  .tog { width: 34px; height: 20px; border-radius: 10px; background: var(--green); position: relative; flex: none; }
+  .tog::after { content: ""; position: absolute; right: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+  .tog.off { background: #e5e5ea; } .tog.off::after { right: auto; left: 2px; }
+  .grab { color: #c7c7cc; font-size: 14px; letter-spacing: -2px; }
+  .ico { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; flex: none; }
+
+  /* Faces */
+  .face { position: absolute; inset: 0; }
+  .ctime { position: absolute; font-weight: 300; letter-spacing: -.02em; }
+  .comp-c { position: absolute; width: calc(var(--s)*46px); height: calc(var(--s)*46px); border-radius: 50%;
+            background: #1c1c1e; display: grid; place-items: center; }
+  .comp-r { position: absolute; border-radius: calc(var(--s)*12px); background: #1c1c1e; padding: .45em .6em; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 600; color: #fff; background: #8e8e93; border-radius: 4px; padding: 1px 5px; margin-left: 4px; vertical-align: 1px; }
+  .tag.mvp { background: #c26b00; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const SIZES = { 41: [176, 215, 34], 45: [198, 242, 38], 49: [205, 251, 40] };
+
+// Line icons in a 24-unit box; filled ones say so.
+const P = {
+  play:   ['f', 'M7 4.5v15l12.5-7.5z'],
+  pause:  ['f', 'M6 4.5h4.2v15H6zM13.8 4.5H18v15h-4.2z'],
+  prev:   ['f', 'M5 5.5h2.2v13H5zM20 5.5v13L8.5 12z'],
+  next:   ['f', 'M16.8 5.5H19v13h-2.2zM4 5.5v13L15.5 12z'],
+  spk:    ['f', 'M3 9h4l5-4.5v15L7 15H3zM15 8.5a4.5 4.5 0 0 1 0 7v-7zM15 4.6a8.4 8.4 0 0 1 0 14.8v-2.3a6.2 6.2 0 0 0 0-10.2z'],
+  spk1:   ['f', 'M3 9h4l5-4.5v15L7 15H3zM15 8.5a4.5 4.5 0 0 1 0 7v-7z'],
+  mute:   ['f', 'M3 9h4l5-4.5v15L7 15H3z', 's', 'M15.5 9.5l5 5M20.5 9.5l-5 5'],
+  power:  ['s', 'M12 3.5v8M6.6 6.8a7.5 7.5 0 1 0 10.8 0'],
+  list:   ['s', 'M3.5 6h11M3.5 11h11M3.5 16h7', 'f', 'M17 9.5l4-1v7.3a2.2 2.2 0 1 1-1.4-2V10.6l-2.6.7z'],
+  up:     ['s', 'M6 14.5l6-6 6 6'], down: ['s', 'M6 9.5l6 6 6-6'],
+  left:   ['s', 'M14.5 6l-6 6 6 6'], right: ['s', 'M9.5 6l6 6-6 6'],
+  home:   ['f', 'M12 3.5l8.5 7.6V20.5h-5.6v-5.8H9.1v5.8H3.5v-9.4z'],
+  back:   ['s', 'M9 13.5L4.5 9 9 4.5M4.5 9h10a5 5 0 0 1 0 10H12'],
+  star:   ['f', 'M12 2.8l2.7 6 6.5.6-4.9 4.3 1.5 6.4L12 16.8l-5.8 3.3 1.5-6.4-4.9-4.3 6.5-.6z'],
+  note:   ['f', 'M9 5.5l11-2.4v12.6a2.8 2.8 0 1 1-1.8-2.6V7.2L10.8 8.8v9a2.8 2.8 0 1 1-1.8-2.6z'],
+  tv:     ['s', 'M3.5 5.5h17v11h-17zM8.5 20h7M12 16.5V20'],
+  grid:   ['f', 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z'],
+  dpad:   ['s', 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 1 0 0-17zM12 9a3 3 0 1 0 0 6 3 3 0 1 0 0-6z'],
+  box:    ['s', 'M3.5 8h17v8h-17zM6.5 12h3', 'f', 'M16.5 10.8a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 1 1 0-2.4z'],
+  check:  ['s', 'M5 12.5l4.5 4.5L19.5 7'],
+  plus:   ['s', 'M12 5v14M5 12h14'], minus: ['s', 'M5 12h14'],
+  house:  ['f', 'M12 3.5l8.5 7.6V20.5h-5.6v-5.8H9.1v5.8H3.5v-9.4z'],
+  hifi:   ['f', 'M6.5 2.5h11a1 1 0 0 1 1 1v17a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-17a1 1 0 0 1 1-1z', 'k', 'M12 11.5a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 1 0 0-6.4zM12 5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 1 0 0-3z'],
+  stairs: ['f', 'M3 20.5v-4h4.5v-4.2H12V8h4.5V3.5H21v17z'],
+  mount:  ['f', 'M2.5 19.5l6.2-10.4 4 6.4 2.6-3.8 6.2 7.8z'],
+  bed:    ['f', 'M3 7h2v6h16v7h-2v-2.5H5V20H3zM7 9.5h5V13H7zM13.5 9.5h4.8a2.7 2.7 0 0 1 2.7 2.7v.8h-7.5z'],
+  sun:    ['f', 'M12 8a4 4 0 1 0 0 8 4 4 0 1 0 0-8z', 's', 'M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8'],
+  ch:     ['s', 'M7 9l5-5 5 5M7 15l5 5 5-5'],
+  mic:    ['f', 'M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z', 's', 'M6 11.5a6 6 0 0 0 12 0M12 17.5v3'],
+  phone:  ['s', 'M7.5 2.5h9a1 1 0 0 1 1 1v17a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-17a1 1 0 0 1 1-1zM10.5 18.5h3'],
+  spin:   ['s', 'M12 3.5a8.5 8.5 0 1 0 8.5 8.5'],
+  bolt:   ['f', 'M13 2.5L5 13.5h6l-1 8 8-11h-6z'],
+};
+function ic(name, size = 16, color = 'currentColor', sw = 2) {
+  const parts = P[name]; let out = '';
+  for (let i = 0; i < parts.length; i += 2) {
+    const kind = parts[i], d = parts[i + 1];
+    if (kind === 'f') out += `<path d="${d}" fill="${color}"/>`;
+    else if (kind === 'k') out += `<path d="${d}" fill="#000"/>`;
+    else out += `<path d="${d}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" style="display:block;flex:none">${out}</svg>`;
+}
+
+function watch(size, inner, { crowned = false } = {}) {
+  const [w, h, r] = SIZES[size]; const s = w / 198;
+  return `<div class="watch${crowned ? ' crowned' : ''}" style="--w:${w}px;--h:${h}px;--r:${r}px;--s:${s}">
+    <div class="screen">${inner(s, w, h)}</div></div>`;
+}
+const cell = (watchHTML, cap) => `<div class="cell">${watchHTML}<div class="cap">${cap}</div></div>`;
+const arrow = (text) => `<div class="arrow"><span class="a">→</span>${text}</div>`;
+const dots = (n, on) => `<div class="dots">${Array.from({ length: n }, (_, i) => `<i class="${i === on ? 'on' : ''}"></i>`).join('')}</div>`;
+
+// ---------- Screens ----------
+function nowPlaying(o = {}) {
+  const room = o.room || 'Kitchen', vol = o.vol ?? 45, playing = o.playing ?? true;
+  return (s) => `
+    <div style="position:absolute;inset:0;background:radial-gradient(120% 70% at 50% 0%, rgba(217,136,114,.55), rgba(107,53,80,.35) 55%, #000 100%)"></div>
+    <div class="navtitle">${ic(o.group ? 'stairs' : 'hifi', 13 * s, 'var(--accent)')}${room}<span style="opacity:.8">›</span></div>
+    <div class="clock">9:41</div>
+    ${dots(3, 0)}
+    <div class="pad" style="bottom:${54 * s}px">
+      <div style="display:flex;gap:${8 * s}px;align-items:center;margin-top:${4 * s}px">
+        <div class="art sunset" style="width:${46 * s}px;height:${46 * s}px"></div>
+        <div style="min-width:0">
+          <div class="t1">Golden Hour</div>
+          <div class="t2">The Lanterns</div>
+        </div>
+      </div>
+      <div class="bar" style="margin:${10 * s}px ${2 * s}px 0"><b style="width:43%"></b></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:${10 * s}px ${6 * s}px 0">
+        ${ic('prev', 24 * s, '#fff')}
+        <div style="width:${52 * s}px;height:${52 * s}px;border-radius:50%;background:rgba(255,255,255,.2);display:grid;place-items:center">${ic(playing ? 'pause' : 'play', 26 * s, '#fff')}</div>
+        ${ic('next', 24 * s, '#fff')}
+      </div>
+    </div>
+    <div class="toolbar">
+      <div class="glassbtn">${ic('spk', 17 * s, '#fff')}</div>
+      <div class="pill" style="${o.crown ? 'background:#1f3a26;color:var(--green)' : ''}">${ic('spk1', 11 * s, o.crown ? 'var(--green)' : 'var(--label2)')}<span>${vol}%</span></div>
+      <div class="glassbtn">${ic('list', 17 * s, '#fff')}</div>
+    </div>
+    ${o.crown ? crownHUD(s, vol, null) : ''}`;
+}
+function crownHUD(s, vol, label) {
+  return `<div style="position:absolute;right:${7 * s}px;top:${44 * s}px;bottom:${58 * s}px;width:${7 * s}px;border-radius:4px;background:rgba(255,255,255,.18);overflow:hidden;z-index:7">
+      <div style="position:absolute;left:0;right:0;bottom:0;height:${vol}%;background:var(--green)"></div></div>
+    ${label ? `<div style="position:absolute;left:50%;transform:translateX(-50%);bottom:${54 * s}px;z-index:8;background:#1f3a26" class="pill">${ic('spk', 11 * s, 'var(--green)')}<b>${label}</b><span>${vol}%</span></div>` : ''}`;
+}
+function groupVolume() {
+  return (s) => `
+    <div class="navtitle"><span>‹</span>Downstairs</div><div class="clock">9:41</div>
+    <div class="pad" style="overflow:hidden">
+      <div class="listrow sel" style="flex-direction:column;align-items:stretch;gap:${5 * s}px">
+        <div style="display:flex;justify-content:space-between"><span class="t1">All</span><span class="t2">52%</span></div>
+        <div class="bar" style="height:${5 * s}px"><b style="width:52%;background:var(--green)"></b></div>
+      </div>
+      ${[['Kitchen', 'hifi', 40], ['Living Room', 'hifi', 55], ['Home Theater', 'hifi', 62]].map(([n, i, v]) => `
+      <div class="listrow" style="flex-direction:column;align-items:stretch;gap:${5 * s}px">
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="display:flex;gap:.35em;align-items:center" class="t1">${ic(i, 12 * s, 'var(--label2)')}${n}</span><span class="t2">${v}%</span></div>
+        <div class="bar"><b style="width:${v}%"></b></div>
+      </div>`).join('')}
+    </div>`;
+}
+function roomPicker() {
+  const rows = [['Kitchen', 'hifi', 'Playing', true], ['Downstairs', 'stairs', '', false], ['Outside', 'mount', '', false], ['Main Bedroom', 'bed', 'Nicole · Paused', false], ['Everywhere', 'house', '', false]];
+  return (s) => `
+    <div class="navtitle"><span>‹</span>Play On</div><div class="clock">9:41</div>
+    <div class="pad" style="overflow:hidden">
+      ${rows.map(([n, i, sub, on]) => `
+      <div class="listrow">
+        <div style="width:${24 * s}px;height:${24 * s}px;border-radius:50%;background:${on ? 'var(--accent)' : '#2c2c2e'};display:grid;place-items:center">${ic(i, 13 * s, on ? '#000' : '#fff')}</div>
+        <div class="grow"><div class="t1" style="font-size:.95em">${n}</div>${sub ? `<div class="t2" style="font-size:.72em">${sub}</div>` : ''}</div>
+        ${on ? ic('check', 14 * s, 'var(--accent)', 2.6) : ''}
+      </div>`).join('')}
+    </div>`;
+}
+function startMusic(o = {}) {
+  return (s) => `
+    <div class="navtitle">Music</div><div class="clock">9:41</div>
+    ${dots(3, o.dot ?? 0)}
+    <div class="pad" style="overflow:hidden">
+      <div class="listrow" style="background:rgba(255,159,10,.18)">
+        ${ic('hifi', 14 * s, 'var(--accent)')}
+        <div class="grow"><div class="t2" style="font-size:.7em">PLAY ON</div><div class="t1" style="font-size:.95em">Kitchen</div></div>
+        <span style="color:var(--accent)">›</span>
+      </div>
+      <div class="sec">Favorites</div>
+      <div class="grid" style="grid-template-columns:1fr 1fr">
+        ${[['Afternoon Acoustic', 'acoustic', 'list'], ['Taylor Swift', 'tay', 'star'], ['Spirit of the West', 'sotw', 'star'], ['Lakeside', 'lake', 'spin']].map(([n, c, k]) => `
+        <div style="display:flex;flex-direction:column;gap:${3 * s}px">
+          <div class="art ${c}" style="width:100%;aspect-ratio:1.55;border-radius:${10 * s}px;display:grid;place-items:center">${k === 'spin' ? '' : ''}</div>
+          <div class="t2" style="color:#fff;font-size:.7em">${n}</div>
+        </div>`).join('')}
+      </div>
+    </div>`;
+}
+function starting(o) {
+  return (s) => `
+    <div class="navtitle">Music</div><div class="clock">9:41</div>
+    <div class="pad" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:${8 * s}px;bottom:${20 * s}px">
+      <div class="art ${o.art}" style="width:${64 * s}px;height:${64 * s}px;border-radius:${12 * s}px"></div>
+      <div class="t1">${o.title}</div>
+      <div class="t2" style="white-space:normal">${o.sub}</div>
+      ${o.btn ? `<div class="pill" style="background:var(--glass);font-size:.82em;padding:.5em 1em;margin-top:${4 * s}px">${ic('phone', 13 * s, '#fff')}${o.btn}</div>` : `<div style="color:var(--accent)">${ic('spin', 22 * s, 'var(--accent)', 2.4)}</div>`}
+    </div>`;
+}
+function remoteMain(o = {}) {
+  return (s) => `
+    <div class="navtitle">${ic('tv', 13 * s, 'var(--accent)')}Family Room</div><div class="clock">9:41</div>
+    ${dots(3, 2)}
+    <div class="pad" style="bottom:${54 * s}px">
+      <div class="t2" style="margin:${-2 * s}px 0 ${6 * s}px ${4 * s}px">Samsung TV · Netflix</div>
+      <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="key round" style="aspect-ratio:1;background:#3a1512">${ic('power', 20 * s, 'var(--red)', 2.4)}</div>
+        <div class="key round" style="aspect-ratio:1">${ic('mute', 20 * s, '#fff')}</div>
+        <div class="key round" style="aspect-ratio:1">${ic('play', 18 * s, '#fff')}</div>
+        <div class="key" style="grid-column:span 3;height:${40 * s}px;display:flex;justify-content:space-between;padding:0 ${16 * s}px;align-items:center">
+          ${ic('minus', 18 * s, '#fff', 2.6)}<span style="font-size:.7em;font-weight:600;color:var(--label2);letter-spacing:.06em">VOL</span>${ic('plus', 18 * s, '#fff', 2.6)}
+        </div>
+      </div>
+    </div>
+    <div class="toolbar">
+      <div class="glassbtn">${ic('dpad', 17 * s, '#fff', 1.8)}</div>
+      <div class="glassbtn">${ic('grid', 15 * s, '#fff')}</div>
+      <div class="glassbtn">${ic('box', 18 * s, '#fff', 1.8)}</div>
+    </div>
+    ${o.crown ? crownHUD(s, 30, 'TV') : ''}`;
+}
+function dpad() {
+  return (s) => {
+    const d = 132 * s;
+    return `
+    <div class="navtitle"><span>‹</span>Samsung TV</div><div class="clock">9:41</div>
+    <div style="position:absolute;left:50%;top:${40 * s}px;transform:translateX(-50%);width:${d}px;height:${d}px;border-radius:50%;background:#2c2c2e">
+      <div style="position:absolute;left:50%;top:${8 * s}px;transform:translateX(-50%)">${ic('up', 18 * s, '#fff', 2.4)}</div>
+      <div style="position:absolute;left:50%;bottom:${8 * s}px;transform:translateX(-50%)">${ic('down', 18 * s, '#fff', 2.4)}</div>
+      <div style="position:absolute;top:50%;left:${8 * s}px;transform:translateY(-50%)">${ic('left', 18 * s, '#fff', 2.4)}</div>
+      <div style="position:absolute;top:50%;right:${8 * s}px;transform:translateY(-50%)">${ic('right', 18 * s, '#fff', 2.4)}</div>
+      <div style="position:absolute;inset:${36 * s}px;border-radius:50%;background:#48484a;display:grid;place-items:center;font-weight:600;font-size:.8em">OK</div>
+    </div>
+    <div class="toolbar">
+      <div class="glassbtn">${ic('back', 16 * s, '#fff')}</div>
+      <div class="glassbtn">${ic('home', 15 * s, '#fff')}</div>
+    </div>`;
+  };
+}
+function apps() {
+  const a = [['Netflix', '#000', true], ['Xfinity', '#6135F6'], ['Prime Video', '#0779FF'], ['HBO Max', '#002BE7'], ['Hulu', '#1CE783', false, '#000']];
+  return (s) => `
+    <div class="navtitle"><span>‹</span>Apps</div><div class="clock">9:41</div>
+    <div class="pad" style="overflow:hidden">
+      <div class="grid" style="grid-template-columns:1fr 1fr">
+        ${a.map(([n, c, on, fg]) => `<div style="aspect-ratio:1.45;border-radius:${11 * s}px;background:${c};display:grid;place-items:center;font-weight:800;font-size:.78em;color:${fg || '#fff'};${on ? 'box-shadow:0 0 0 2px #fff inset, 0 0 0 1px #555;' : ''}">${n}</div>`).join('')}
+      </div>
+    </div>`;
+}
+function xfinity() {
+  return (s) => `
+    <div class="navtitle"><span>‹</span>Xfinity</div><div class="clock">9:41</div>
+    <div class="pad" style="overflow:hidden">
+      <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="key" style="height:${36 * s}px">${ic('up', 16 * s, '#fff', 2.4)}<div class="lbl" style="margin:0">CH</div></div>
+        <div class="key round" style="height:${36 * s}px;aspect-ratio:1;margin:auto">${ic('pause', 16 * s, '#fff')}</div>
+        <div class="key" style="height:${36 * s}px">${ic('back', 16 * s, '#fff')}</div>
+        <div class="key" style="height:${36 * s}px">${ic('down', 16 * s, '#fff', 2.4)}<div class="lbl" style="margin:0">CH</div></div>
+        <div class="key" style="height:${36 * s}px;grid-column:span 2;font-size:.72em;font-weight:600">Guide</div>
+      </div>
+      <div class="sec" style="display:flex;gap:.3em;align-items:center">${ic('star', 10 * s, 'var(--accent)')}Favorites</div>
+      ${['Mariners', 'Seahawks'].map((n) => `<div class="listrow" style="padding:.42em .65em"><div class="grow t1" style="font-size:.88em">${n}</div>${ic('mic', 12 * s, 'var(--label2)')}</div>`).join('')}
+    </div>`;
+}
+
+// ---------- Faces and widgets ----------
+function faceInfograph() {
+  return (s) => `
+    <div class="face">
+      <div style="position:absolute;top:${10 * s}px;left:0;right:0;text-align:center;font-size:.72em;color:var(--accent);font-weight:600">${'▶︎'} Golden Hour · Kitchen</div>
+      <div class="ctime" style="left:0;right:0;top:${58 * s}px;text-align:center;font-size:${58 * s}px">10:09</div>
+      <div class="comp-c" style="left:${14 * s}px;bottom:${16 * s}px;background:conic-gradient(var(--accent) 0 45%, #333 45% 100%);padding:${3 * s}px">
+        <div style="width:100%;height:100%;border-radius:50%;background:#111;display:grid;place-items:center">${ic('note', 20 * s, 'var(--accent)')}</div></div>
+      <div class="comp-c" style="left:50%;transform:translateX(-50%);bottom:${16 * s}px">
+        <div class="art acoustic" style="width:${36 * s}px;height:${36 * s}px;border-radius:50%;display:grid;place-items:center">${ic('play', 14 * s, '#fff')}</div></div>
+      <div class="comp-c" style="right:${14 * s}px;bottom:${16 * s}px;background:#2a0f0d">${ic('power', 20 * s, 'var(--red)', 2.4)}</div>
+    </div>`;
+}
+function faceModular() {
+  return (s) => `
+    <div class="face">
+      <div class="clock" style="color:var(--accent);font-size:1.25em;top:${8 * s}px">10:09</div>
+      <div class="comp-r" style="left:${8 * s}px;right:${8 * s}px;top:${46 * s}px;display:flex;gap:${8 * s}px;align-items:center">
+        <div class="art sunset" style="width:${40 * s}px;height:${40 * s}px"></div>
+        <div style="min-width:0;flex:1">
+          <div style="font-size:.66em;color:var(--accent);font-weight:600">KITCHEN · PLAYING</div>
+          <div class="t1" style="font-size:.95em">Golden Hour</div>
+          <div class="t2" style="font-size:.78em">The Lanterns</div>
+        </div>
+      </div>
+      <div class="comp-r" style="left:${8 * s}px;right:${8 * s}px;top:${110 * s}px;display:flex;gap:${8 * s}px;align-items:center">
+        <div style="width:${28 * s}px;height:${28 * s}px;border-radius:8px;background:#000;display:grid;place-items:center;font-size:.45em;font-weight:800;color:#e50914">N</div>
+        <div style="min-width:0;flex:1"><div style="font-size:.66em;color:var(--accent);font-weight:600">FAMILY ROOM TV</div><div class="t1" style="font-size:.9em">Netflix</div></div>
+        ${ic('power', 16 * s, 'var(--red)', 2.4)}
+      </div>
+      <div class="comp-c" style="left:${10 * s}px;bottom:${12 * s}px">${ic('star', 18 * s, 'var(--accent)')}</div>
+      <div class="comp-c" style="left:50%;transform:translateX(-50%);bottom:${12 * s}px">${ic('mute', 18 * s, '#fff')}</div>
+      <div class="comp-c" style="right:${10 * s}px;bottom:${12 * s}px;font-size:.62em;font-weight:700;color:var(--accent);text-align:center;line-height:1.05">CH<br>+</div>
+    </div>`;
+}
+function smartStack() {
+  return (s) => `
+    <div class="clock" style="font-size:1.4em;top:${6 * s}px;right:auto;left:${14 * s}px">10:09</div>
+    <div style="position:absolute;left:${8 * s}px;right:${8 * s}px;top:${40 * s}px;border-radius:${16 * s}px;background:#1c1c1e;padding:${8 * s}px ${9 * s}px">
+      <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:.62em;color:var(--label2);font-weight:600">JEFF · LIVE ACTIVITY</span>${ic('phone', 10 * s, 'var(--label2)')}</div>
+      <div style="display:flex;align-items:center;gap:${6 * s}px;margin-top:${4 * s}px">
+        <div style="width:${26 * s}px;height:${26 * s}px;border-radius:50%;background:var(--accent);display:grid;place-items:center">${ic('hifi', 13 * s, '#000')}</div>
+        <div class="t1" style="flex:1;font-size:.95em">Kitchen</div>
+        <div style="width:${26 * s}px;height:${26 * s}px;border-radius:50%;background:var(--glass);display:grid;place-items:center">${ic('pause', 12 * s, '#fff')}</div>
+      </div>
+      <div style="display:flex;gap:2px;margin-top:${6 * s}px">${Array.from({ length: 10 }, (_, i) => `<div style="flex:1;height:${5 * s}px;border-radius:2px;background:${i < 5 ? 'var(--green)' : 'rgba(255,255,255,.2)'}"></div>`).join('')}</div>
+    </div>
+    <div style="position:absolute;left:${14 * s}px;right:${14 * s}px;top:${124 * s}px;border-radius:${14 * s}px;background:#141415;padding:${8 * s}px ${9 * s}px">
+      <div style="font-size:.62em;color:var(--label2);font-weight:600">FAMILY ROOM TV</div>
+      <div style="display:flex;gap:${6 * s}px;margin-top:${5 * s}px">
+        ${[['power', 'var(--red)', '#3a1512'], ['mute', '#fff', '#2c2c2e'], ['play', '#fff', '#2c2c2e']].map(([n, c, b]) => `<div style="flex:1;height:${26 * s}px;border-radius:${9 * s}px;background:${b};display:grid;place-items:center">${ic(n, 13 * s, c, 2.4)}</div>`).join('')}
+        <div style="flex:1;height:${26 * s}px;border-radius:${9 * s}px;background:#000;display:grid;place-items:center;font-size:.6em;font-weight:900;color:#e50914;box-shadow:0 0 0 1px #333 inset">N</div>
+      </div>
+    </div>
+    <div style="position:absolute;left:${22 * s}px;right:${22 * s}px;top:${196 * s}px;height:${30 * s}px;border-radius:${12 * s}px ${12 * s}px 0 0;background:#0e0e0f"></div>`;
+}
+function controls() {
+  const c = [['power', 'TV Power', 'var(--red)'], ['mute', 'Mute TV', '#fff'], ['pause', 'Pause Music', '#fff'], ['star', 'Acoustic', 'var(--accent)'], ['up', 'Volume Up', '#fff'], ['down', 'Volume Down', '#fff']];
+  return (s) => `
+    <div class="clock">9:41</div>
+    <div class="pad" style="top:${30 * s}px">
+      <div class="grid" style="grid-template-columns:repeat(3,1fr);gap:${8 * s}px">
+        ${c.map(([n, l, col]) => `<div style="display:flex;flex-direction:column;align-items:center;gap:${3 * s}px">
+          <div style="width:${46 * s}px;height:${46 * s}px;border-radius:50%;background:#2c2c2e;display:grid;place-items:center">${ic(n, 19 * s, col, 2.4)}</div>
+          <div style="font-size:.52em;color:var(--label2);text-align:center;white-space:nowrap">${l}</div></div>`).join('')}
+      </div>
+    </div>`;
+}
+
+// ---------- Phone settings ----------
+function phoneSettings() {
+  const rooms = [['Kitchen', true, 'Default'], ['Downstairs', true], ['Outside', true], ['Main Bedroom', true], ['Everywhere', false], ['Bonus Room', false]];
+  const favs = [['Afternoon Acoustic', true], ['Taylor Swift', true], ['Spirit of the West', true]];
+  return `<div class="phone"><div class="pscreen">
+    <div class="pstatus"><span>9:41</span><span>●●● ▮</span></div>
+    <div class="pnav"><span class="back">‹ Settings</span></div>
+    <div class="ptitle">Apple Watch</div>
+    <div class="psec">This watch</div>
+    <div class="pgroup">
+      <div class="prow"><span class="grow">Music account</span><span class="val">Jeff ›</span></div>
+      <div class="prow"><span class="grow">Opens to</span><span class="val">Automatic ›</span></div>
+    </div>
+    <div class="psec">Rooms · drag to order</div>
+    <div class="pgroup">
+      ${rooms.map(([n, on, tag]) => `<div class="prow"><span class="grab">≡</span><span class="grow">${n}${tag ? ` <span class="val" style="font-size:11px">· ${tag}</span>` : ''}</span><span class="tog${on ? '' : ' off'}"></span></div>`).join('')}
+    </div>
+    <div class="psec">Favorites</div>
+    <div class="pgroup">
+      ${favs.map(([n, on]) => `<div class="prow"><span class="grab">≡</span><span class="grow">${n}</span><span class="tog${on ? '' : ' off'}"></span></div>`).join('')}
+      <div class="prow"><span class="grow">Recents</span><span class="val">3 ›</span></div>
+    </div>
+    <div class="psec">Remote</div>
+    <div class="pgroup">
+      <div class="prow"><span class="grow">Family Room</span><span class="val">Keys, Apps ›</span></div>
+    </div>
+    <div class="pfoot">Starts from the <b>watch:</b> section of hassonic.yaml. Sent to the watch 2 min ago.</div>
+  </div></div>`;
+}
+
+// ---------- Boards ----------
+const BOARDS = {
+  'now-playing-sizes': () => `
+    <h1>Now Playing at each size</h1>
+    <div class="sub">One layout that scales with the screen. Art, title and transport stay put; the toolbar holds room volumes (left) and starting something else (right). The pill shows the room's volume, which the Digital Crown changes.</div>
+    <div class="row" style="align-items:flex-end">
+      ${cell(watch(41, nowPlaying()), '<b>41mm</b> · 176×215 pt')}
+      ${cell(watch(45, nowPlaying()), '<b>45mm</b> · 198×242 pt')}
+      ${cell(watch(49, nowPlaying()), '<b>49mm Ultra</b> · 205×251 pt')}
+    </div>`,
+  'music-flow': () => `
+    <h1>Music: volume and rooms</h1>
+    <div class="sub">Turning the Crown on Now Playing sets the whole room's volume. For a group, the speaker button lists each member; the green ring marks the row the Crown is driving. The room name at the top opens Play On, which moves the music.</div>
+    <div class="row">
+      ${cell(watch(45, nowPlaying({ crown: 'Kitchen', vol: 58 }), { crowned: true }), '<b>Crown turns</b>: a volume bar appears at the edge and the pill turns green, then fade 1.5 s after it stops')}
+      ${cell(watch(45, nowPlaying({ room: 'Downstairs', group: true, vol: 52 })), '<b>A group playing</b>: the pill is the members\' average')}
+      ${cell(watch(45, groupVolume(), { crowned: true }), '<b>Speaker button</b>: All, then each member. Tap a row to give it the Crown. Pinned speakers (an Echo feeding the receiver) show the receiver')}
+      ${cell(watch(45, roomPicker()), '<b>Room name</b>: Play On, the rooms from config in order. Shows what else is playing and whose')}
+    </div>`,
+  'start-music': () => `
+    <h1>Starting music</h1>
+    <div class="sub">What the watch opens to when nothing is playing (the phone's Music tab rule). One room row, then the favorites and recents picked for this watch. A start that needs the long speaker hand-off is passed to the iPhone.</div>
+    <div class="row">
+      ${cell(watch(45, startMusic()), '<b>Start</b>: Play On row (the default room), then favorites, then recents below')}
+      ${cell(watch(45, starting({ art: 'acoustic', title: 'Afternoon Acoustic', sub: 'Starting in Kitchen…' })), '<b>Tap a favorite</b>: starts at once and lands on Now Playing when HA confirms')}
+      ${cell(watch(45, starting({ art: 'acoustic', title: 'Moving Kitchen', sub: 'Kitchen is on Nicole\'s account. Your iPhone is moving it.', btn: 'On iPhone' })), '<b>Speaker on the other account</b>: the iPhone runs the claim; the watch shows progress')}
+      ${cell(watch(41, startMusic()), '<b>41mm</b>: same grid, two across')}
+    </div>`,
+  'tv-remote': () => `
+    <h1>TV remote</h1>
+    <div class="sub">One page per <code>tv_remote</code> card picked for the watch. The keys you reach for from the couch are on the first screen; the Crown is TV volume. The toolbar opens the d-pad, the apps and the Xfinity box.</div>
+    <div class="row">
+      ${cell(watch(45, remoteMain({ crown: true }), { crowned: true }), '<b>Remote</b>: power, mute, play/pause, volume. Title shows what\'s on')}
+      ${cell(watch(45, dpad()), '<b>D-pad</b>: tap the edges, OK in the middle; Back and Home')}
+      ${cell(watch(45, apps()), '<b>Apps</b>: the card\'s <code>apps</code>, ringed when on screen. Turns the TV on first')}
+      ${cell(watch(45, xfinity()), '<b>Xfinity box</b>: channel, play/pause, Back, Guide, and the ★ favorites sent as voice text')}
+    </div>`,
+  'navigation': () => `
+    <h1>Navigation</h1>
+    <div class="sub">Three pages stacked vertically: swipe or turn the Crown between them, as in Apple's own apps. Everything else is one level down from a toolbar or title button, and Back returns. The watch opens to Now Playing when something is playing, otherwise Start; Remote is a swipe away.</div>
+    <div class="row" style="align-items:center">
+      ${cell(watch(45, nowPlaying()), '<b>1 · Now Playing</b><br>title → Play On · speaker → volumes · list → Start')}
+      <div class="arrow"><span class="a">↕</span>swipe or Crown at the edge</div>
+      ${cell(watch(45, startMusic({ dot: 1 })), '<b>2 · Start</b><br>Play On row → rooms · tile → play')}
+      <div class="arrow"><span class="a">↕</span></div>
+      ${cell(watch(45, remoteMain()), '<b>3 · Remote</b> (one per card)<br>toolbar → D-pad · Apps · Box')}
+    </div>
+    <div class="sub" style="margin-top:18px">On Now Playing and Remote the Crown sets volume, not paging, so those pages change by swipe only, as Apple's Now Playing does. Start scrolls with the Crown and pages at its ends.</div>`,
+  'complications': () => `
+    <h1>Complications, Smart Stack and controls</h1>
+    <div class="sub">Faces get launchers that show the last known state, plus one-tap actions that open the app and do the thing. The Smart Stack already gets the iPhone's speaker Live Activity; the watch adds a TV widget with buttons. watchOS 26 controls cover single actions in Control Center and on the Ultra's Action button.</div>
+    <div class="row">
+      ${cell(watch(45, faceInfograph()), '<b>Circular and inline</b>: Music (ring = room volume), a favorite, TV power; inline now playing')}
+      ${cell(watch(45, faceModular()), '<b>Rectangular</b>: now playing, TV app; circular: favorite, mute, channel')}
+      ${cell(watch(45, smartStack()), '<b>Smart Stack</b>: the iPhone\'s Live Activity, then the TV widget (relevant in the evening, at home)')}
+      ${cell(watch(45, controls()), '<b>Controls</b> (watchOS 26): Control Center and Action button')}
+    </div>`,
+  'phone-settings': () => `
+    <h1>Setting up the watch on the iPhone</h1>
+    <div class="sub">The household YAML says what the watch may show; this screen is each person's pick from it, so Jeff's and Nicole's watches can differ. The phone sends the result to the watch.</div>
+    <div class="row" style="align-items:center">
+      <div class="cell">${phoneSettings()}<div class="cap"><b>Settings → Apple Watch</b> on the iPhone</div></div>
+      <div class="arrow" style="width:120px"><span class="a">→</span>WatchConnectivity<br>application context</div>
+      ${cell(watch(45, startMusic()), '<b>The watch</b> uses it at once, and keeps it for when the iPhone is away')}
+    </div>`,
+};
+
+const name = location.hash.slice(1) || 'now-playing-sizes';
+document.getElementById('root').innerHTML = Object.entries(BOARDS)
+  .map(([k, f]) => `<section class="board${k === name ? ' on' : ''}" id="b-${k}">${f()}</section>`).join('');
+</script>
+</body>
+</html>
