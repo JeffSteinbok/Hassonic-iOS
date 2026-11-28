@@ -26,7 +26,8 @@ enum DemoMode {
 
     /// HASSONIC_OPEN_SHEET: a sheet to open for a screenshot. `room-music`
     /// is a room's Play Music sheet; `play-on` the Music tab's Play On sheet
-    /// as it asks when there's no speaker to play on; `browse` Browse.
+    /// as it asks when there's no speaker to play on; `browse` Browse;
+    /// `play-something-else` the Music tab's start page, opened while playing.
     static var openSheet: String? {
         ProcessInfo.processInfo.environment["HASSONIC_OPEN_SHEET"]
     }

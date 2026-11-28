@@ -71,59 +71,88 @@ struct MusicZonesView: View {
         transitionManager.committed.hasMedia
     }
 
+    /// Which layout is up; it holds still while someone's touching the
+    /// screen (see `MusicTabModeLatch`).
+    @State private var latch: MusicTabModeLatch?
+    @State private var isScrolling = false
+    @State private var stopTask: Task<Void, Never>?
+    @State private var path: [MusicRoute] = []
+    /// Starts from the start layout, and from its pushed copy.
+    @StateObject private var starter = MusicStarter()
+    @EnvironmentObject private var router: AppRouter
+    /// The Play On sheet from a link ("Play on…") while the start layout is
+    /// up; the Now Playing card has its own.
+    @State private var showingPlayOn = false
+    @State private var playOnPicked = false
+    @State private var playOnSwitched = false
+
+    private enum MusicRoute: Hashable {
+        case start
+    }
+
+    private var mode: MusicTabMode {
+        latch?.shown ?? MusicTabLayout.wanted(hasMedia: hasMedia || nowPlayingHasMedia(mediaEntity))
+    }
+
+    /// Over the blurred cover: the playing layout with something to show.
+    private var onArtwork: Bool { mode == .playing && hasMedia }
+
+    /// Someone's in the middle of something: the layout waits for them.
+    private var isHolding: Bool {
+        isScrolling || starter.playOn != nil || showingMediaBrowser || showingPlayOn || !path.isEmpty
+    }
+
+    private var otherPlaying: [MusicZone] {
+        guard let selectedAccount else { return [] }
+        return MusicTabLayout.otherPlaying(zones: selectedAccount.zones, active: hasMedia ? activeZone : nil) { id in
+            ["playing", "paused"].contains(haClient.entity(id)?.state ?? "")
+        }
+    }
+
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ZStack {
-                if hasMedia {
+                if onArtwork {
                     backgroundArtwork
+                        .transition(.opacity)
                 }
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        sectionHeader("Now Playing")
-                        if let selectedAccount {
-                            NowPlayingCard(entity: mediaEntity, presentation: transitionManager.committed, mediaEntityId: selectedAccount.entityId, accountDisplayName: selectedAccount.displayName, speakerClaim: configuration.speakerClaim, zones: selectedAccount.zones)
-
-                            let recents = recentStore.items(for: selectedAccount.entityId)
-                            if !selectedAccount.favorites.isEmpty || !recents.isEmpty {
-                                FavoritesBar(mediaEntityId: selectedAccount.entityId, accountDisplayName: selectedAccount.displayName, speakerClaim: configuration.speakerClaim, favorites: selectedAccount.favorites, recents: recents, zones: selectedAccount.zones, hasMedia: hasMedia)
-                                    .padding(.top, 8)
-                            }
-                        } else {
-                            card {
-                                Text("No media accounts are configured.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-
-                        sectionHeader("Speaker Volume")
-                            .padding(.top, 8)
-                        card {
-                            if speakers.isEmpty {
-                                Text("No speakers for this selection")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                ScrollViewReader { scroller in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Color.clear.frame(height: 0).id(Self.top)
+                            if let selectedAccount {
+                                switch mode {
+                                case .playing:
+                                    playingLayout(selectedAccount)
+                                        .transition(.opacity)
+                                case .start:
+                                    startLayout(selectedAccount)
+                                        .transition(.opacity)
+                                }
                             } else {
-                                VStack(spacing: 10) {
-                                    ForEach(speakers, id: \.zone.id) { pair in
-                                        SpeakerRow(zone: pair.zone, entity: pair.entity)
-                                        if pair.zone.id != speakers.last?.zone.id {
-                                            Divider().overlay(hasMedia ? .white.opacity(0.2) : Color(.separator))
-                                        }
-                                    }
+                                card {
+                                    Text("No media accounts are configured.")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                             }
                         }
+                        .padding()
                     }
-                    .padding()
+                    .onScrollPhaseChange { _, phase in
+                        isScrolling = phase != .idle
+                    }
+                    .onChange(of: mode) { _, _ in
+                        withAnimation(.easeInOut(duration: 0.35)) { scroller.scrollTo(Self.top, anchor: .top) }
+                    }
                 }
                 .reloadsConfigurationOnPull()
             }
             .navigationTitle("Music")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(hasMedia ? .dark : nil, for: .navigationBar)
+            .toolbarColorScheme(onArtwork ? .dark : nil, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     AppMenuButton(page: .music)
@@ -154,7 +183,7 @@ struct MusicZonesView: View {
                         } label: {
                             Text("Browse")
                                 .font(.body.weight(.medium))
-                                .foregroundStyle(hasMedia ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+                                .foregroundStyle(onArtwork ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
                         }
                         .accessibilityHint("Opens the Home Assistant media library")
                     }
@@ -166,6 +195,22 @@ struct MusicZonesView: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(.regularMaterial, in: Capsule())
+                }
+            }
+            .navigationDestination(for: MusicRoute.self) { _ in
+                if let selectedAccount {
+                    ScrollView {
+                        MusicStartPage(
+                            account: selectedAccount, speakerClaim: configuration.speakerClaim,
+                            recents: recentStore.items(for: selectedAccount.entityId), hasMedia: hasMedia,
+                            activeZone: activeZone, providerName: configuration.mediaProvider?.name,
+                            starter: starter, isPushed: true,
+                            browse: { showingMediaBrowser = true },
+                            onStarted: { path.removeAll() })
+                        .padding()
+                    }
+                    .navigationTitle("Play Something Else")
+                    .navigationBarTitleDisplayMode(.inline)
                 }
             }
             .sheet(isPresented: $showingMediaBrowser) {
@@ -180,16 +225,43 @@ struct MusicZonesView: View {
                             hasMedia: hasMedia)
                         browseStarter.start(request, context: context, client: haClient) {
                             showingMediaBrowser = false
+                            path.removeAll()
                         }
                     }
                     .musicStartFlow(browseStarter)
                 }
             }
+            .sheet(isPresented: $showingPlayOn, onDismiss: {
+                router.musicShowPlayOn = false
+                playOnPicked = false
+                playOnSwitched = false
+            }) {
+                if let selectedAccount {
+                    let key = StorageKeys.lastPlayOnSource(account: selectedAccount.entityId)
+                    let remembered = Binding(
+                        get: { UserDefaults.standard.string(forKey: key) ?? "" },
+                        set: { UserDefaults.standard.set($0, forKey: key) })
+                    PlayOnSheet(mediaEntityId: selectedAccount.entityId, accountDisplayName: selectedAccount.displayName,
+                                speakerClaim: configuration.speakerClaim, zones: selectedAccount.zones,
+                                activeSource: remembered.wrappedValue.isEmpty ? nil : remembered.wrappedValue,
+                                lastPlayOnSourceName: remembered, zonePicked: $playOnPicked,
+                                zoneSwitchedAccount: $playOnSwitched, desiredContentName: nil)
+                }
+            }
         }
+        .musicStartFlow(starter)
         .task {
             transitionManager.update(entity: mediaEntity, baseURLString: haClient.baseURLString)
+            if latch == nil { latch = MusicTabModeLatch(mode) }
+            showPlayOnFromLinkIfNeeded()
             #if DEBUG && targetEnvironment(simulator)
             if DemoMode.openSheet == "browse" { showingMediaBrowser = true }
+            if DemoMode.openSheet == "play-something-else" { path = [.start] }
+            if DemoMode.openSheet == "play-on", let selectedAccount, let favorite = selectedAccount.favorites.first {
+                starter.showDemoFallback(MusicStartRequest(favorite: favorite), context: MusicStartContext(
+                    accountEntityId: selectedAccount.entityId, accountDisplayName: selectedAccount.displayName,
+                    speakerClaim: configuration.speakerClaim, zones: selectedAccount.zones, hasMedia: hasMedia))
+            }
             #endif
         }
         // The service's own "Recently played", each time the tab opens or
@@ -202,6 +274,89 @@ struct MusicZonesView: View {
         }
         .onChange(of: trackIdentity(for: mediaEntity)) { _, _ in
             transitionManager.update(entity: mediaEntity, baseURLString: haClient.baseURLString)
+        }
+        .onChange(of: hasMedia) { _, _ in settleMode() }
+        .onChange(of: isHolding) { _, holding in
+            withAnimation(.easeInOut(duration: 0.35)) { _ = latch?.hold(holding) }
+        }
+        .onChange(of: router.musicShowPlayOn) { _, _ in showPlayOnFromLinkIfNeeded() }
+    }
+
+    private static let top = "music-top"
+
+    /// Moves to the layout the account's state asks for. A start shows at
+    /// once; a stop waits out `stopGrace` first, in case it's only a track
+    /// change or a handoff between speakers.
+    private func settleMode() {
+        stopTask?.cancel()
+        let wanted = MusicTabLayout.wanted(hasMedia: hasMedia)
+        if wanted == .start, mode == .playing {
+            stopTask = Task {
+                try? await Task.sleep(for: MusicTabLayout.stopGrace)
+                guard !Task.isCancelled, !hasMedia else { return }
+                withAnimation(.easeInOut(duration: 0.35)) { _ = latch?.want(.start) }
+            }
+        } else {
+            withAnimation(.easeInOut(duration: 0.35)) { _ = latch?.want(wanted) }
+        }
+    }
+
+    /// "Play on…" from a shortcut: the Now Playing card asks while it's up;
+    /// with the start layout up, this does.
+    private func showPlayOnFromLinkIfNeeded() {
+        if router.musicShowPlayOn, mode == .start, selectedAccount != nil { showingPlayOn = true }
+    }
+
+    @ViewBuilder
+    private func playingLayout(_ account: MediaAccount) -> some View {
+        NowPlayingCard(entity: mediaEntity, presentation: transitionManager.committed, mediaEntityId: account.entityId, accountDisplayName: account.displayName, speakerClaim: configuration.speakerClaim, zones: account.zones)
+
+        NavigationLink(value: MusicRoute.start) {
+            PlaySomethingElseRow(recents: recentStore.items(for: account.entityId))
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: NowPlayingHero.maxSide)
+        .frame(maxWidth: .infinity)
+
+        otherPlayingSection(title: "Also Playing")
+
+        if !speakers.isEmpty {
+            MusicSectionHeader(title: "Speaker Volume", onArtwork: onArtwork)
+                .padding(.top, 8)
+            card {
+                VStack(spacing: 10) {
+                    ForEach(speakers, id: \.zone.id) { pair in
+                        SpeakerRow(zone: pair.zone, entity: pair.entity)
+                        if pair.zone.id != speakers.last?.zone.id {
+                            Divider().overlay(onArtwork ? .white.opacity(0.2) : Color(.separator))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func startLayout(_ account: MediaAccount) -> some View {
+        otherPlayingSection(title: "Playing Elsewhere")
+        MusicStartPage(
+            account: account, speakerClaim: configuration.speakerClaim,
+            recents: recentStore.items(for: account.entityId), hasMedia: hasMedia,
+            activeZone: activeZone, providerName: configuration.mediaProvider?.name,
+            starter: starter, browse: { showingMediaBrowser = true })
+    }
+
+    @ViewBuilder
+    private func otherPlayingSection(title: String) -> some View {
+        let others = otherPlaying
+        if !others.isEmpty {
+            MusicSectionHeader(title: title, onArtwork: onArtwork)
+                .padding(.top, mode == .playing ? 8 : 0)
+            VStack(spacing: 8) {
+                ForEach(others) { zone in
+                    OtherZoneRow(zone: zone, onArtwork: onArtwork)
+                }
+            }
         }
     }
 
@@ -228,12 +383,6 @@ struct MusicZonesView: View {
         }
     }
 
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title.uppercased())
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(hasMedia ? AnyShapeStyle(.white.opacity(0.65)) : AnyShapeStyle(.secondary))
-    }
-
     /// Switches which media account (and therefore Now Playing, playback
     /// controls, zones, and favorites) the whole screen is scoped to.
     private var accountSwitcher: some View {
@@ -256,7 +405,7 @@ struct MusicZonesView: View {
                     .font(.caption2)
             }
             .font(.body.weight(.medium))
-            .foregroundStyle(hasMedia ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+            .foregroundStyle(onArtwork ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
         }
         .accessibilityLabel("Media account")
         .accessibilityHint(accountSwitcherHint)
