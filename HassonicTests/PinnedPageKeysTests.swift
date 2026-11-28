@@ -52,4 +52,19 @@ final class PinnedPageKeysTests: XCTestCase {
         ]
         XCTAssertEqual(actions.compactMap(PinnedPageKeys.action).compactMap(PinnedPageKeys.remoteAction), actions)
     }
+
+    func testAnAppKey_opensItThroughTheMediaPlayer_andSurvivesTheTrip() throws {
+        var tv = samsung
+        tv.apps = [.init(name: "Netflix"), .init(name: "Max", source: "HBO Max")]
+        let keys = PinnedPageKeys.keys(for: page([.tvRemote(.init(tv: tv, box: xfinity, lockScreen: ["app.Max", "app.Netflix"]))]))
+
+        XCTAssertEqual(keys.map(\.id), ["app.Max", "app.Netflix"])
+        XCTAssertEqual(keys.map(\.caption), ["Max", "Netflix"])
+        XCTAssertEqual(keys[0].actions, [.init(kind: .openApp, entityId: "media_player.tv", command: "HBO Max", script: "script.tv_power")])
+
+        let decoded = try JSONDecoder().decode(PinnedPageActivityAttributes.Key.self, from: JSONEncoder().encode(keys[0]))
+        XCTAssertEqual(decoded.actions.compactMap(PinnedPageKeys.remoteAction),
+                       [.openApp(mediaPlayer: "media_player.tv", source: "HBO Max", powerScript: "script.tv_power")])
+    }
 }
+

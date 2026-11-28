@@ -103,7 +103,8 @@ def entities(now: datetime, album_art: str) -> list:
         state("alarm_control_panel.home_alarm", "armed_home", {
             "friendly_name": "Home Alarm", "supported_features": 63, "code_arm_required": False}),
         state("media_player.living_room_tv", "on", {
-            "friendly_name": "Living Room TV", "source": "TV/HDMI", "source_list": ["TV/HDMI", "Netflix", "YouTube"]}),
+            "friendly_name": "Living Room TV", "source": "TV/HDMI",
+            "source_list": ["TV", "HDMI", "Netflix", "YouTube", "Prime Video", "HBO Max", "Hulu"]}),
         state("remote.living_room_tv", "on", {"friendly_name": "Living Room TV"}),
         state("remote.cable_box", "on", {"friendly_name": "Cable Box"}),
         state("media_player.family_room_tv", "on", {
@@ -281,6 +282,8 @@ def main():
     parser.add_argument("--start-volume", metavar="ZONE",
                         help="Show the volume strip a start brings up, for this zone (e.g. media_player.kitchen_speaker)")
     parser.add_argument("--wide-cover", action="store_true", help="Play a 16:9 cover instead of a square one")
+    parser.add_argument("--tv-source", metavar="SOURCE",
+                        help="What the Living Room TV is showing, e.g. Netflix (the remote opens on its apps)")
     parser.add_argument("--device", help="A simulator's UDID, instead of the first " + DEVICE)
     args = parser.parse_args()
 
@@ -299,7 +302,12 @@ def main():
     album_art(demo / "album.png", wide=args.wide_cover)
 
     now = datetime.now(timezone.utc)
-    (demo / "demo-entities.json").write_text(json.dumps(entities(now, (demo / "album.png").as_uri())))
+    demo_entities = entities(now, (demo / "album.png").as_uri())
+    if args.tv_source:
+        for entity in demo_entities:
+            if entity["entity_id"] == "media_player.living_room_tv":
+                entity["attributes"]["source"] = args.tv_source
+    (demo / "demo-entities.json").write_text(json.dumps(demo_entities))
     (demo / "demo-history.json").write_text(json.dumps(history(now)))
     (demo / "demo-browse.json").write_text(json.dumps(browse(demo)))
     (demo / "demo-recents.json").write_text(json.dumps([] if args.no_recents else recents(demo)))
@@ -313,7 +321,8 @@ def main():
     # A light, with-recents run writes the README's files; any other
     # variant gets its own name beside them.
     suffix = ("-dark" if args.appearance == "dark" else "") + ("-no-recents" if args.no_recents else "") \
-        + ("-start-volume" if args.start_volume else "") + ("-wide-cover" if args.wide_cover else "")
+        + ("-start-volume" if args.start_volume else "") + ("-wide-cover" if args.wide_cover else "") \
+        + (f"-{args.tv_source.lower().replace(' ', '-')}" if args.tv_source else "")
 
     OUT.mkdir(parents=True, exist_ok=True)
     for name, link, extra in SCREENS:

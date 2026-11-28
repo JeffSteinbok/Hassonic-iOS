@@ -51,6 +51,9 @@ enum PageShortcuts {
     /// and the app icon offer.
     @MainActor
     static func update(for configuration: [DashboardPageConfiguration]) {
+        if TVAppShortcuts.update(for: configuration) {
+            HassonicShortcuts.updateAppShortcutParameters()
+        }
         let pages = AppPage.all(in: configuration)
         guard pages != self.pages || UIApplication.shared.shortcutItems?.isEmpty != false else { return }
         if let data = try? JSONEncoder().encode(pages) {
@@ -119,7 +122,8 @@ struct OpenPageIntent: AppIntent {
 }
 
 /// Ready-made in the Shortcuts app and for Siri: one per page ("Open Kitchen
-/// in Steinbok Home"), and music on a speaker (see MusicIntents).
+/// in Steinbok Home"), music on a speaker (see MusicIntents), and apps on a
+/// TV (see TVAppShortcuts).
 struct HassonicShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
@@ -141,6 +145,20 @@ struct HassonicShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Play on Speaker",
             systemImageName: "hifispeaker.2"
+        )
+        AppShortcut(
+            intent: OpenTVAppIntent(),
+            phrases: [
+                // The app's synonyms name its TV: "Open Netflix on the
+                // Family Room TV with Steinbok Home".
+                "Open \(\.$app) with \(.applicationName)",
+                "Open \(\.$app) on the TV with \(.applicationName)",
+                "Open \(\.$app) on the TV in \(.applicationName)",
+                "Put on \(\.$app) with \(.applicationName)",
+                "Watch \(\.$app) with \(.applicationName)",
+            ],
+            shortTitle: "Open App on TV",
+            systemImageName: "play.tv"
         )
     }
 }

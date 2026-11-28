@@ -264,6 +264,8 @@ enum DashboardConfigurationError: LocalizedError, Equatable {
     case invalidEntity(entityID: String, cardType: String, expectedDomain: String)
     case tvRemoteNeedsADevice(cardType: String)
     case unknownLockScreenKey(String, cardType: String)
+    case tvAppsNeedAMediaPlayer(cardType: String)
+    case tvAppColor(String, cardType: String)
     case roomHotspotOutsideImage(entityID: String, cardType: String)
     /// Already-formatted description of a `DecodingError`, which on its own
     /// only ever says "the data isn't in the correct format".
@@ -292,7 +294,11 @@ enum DashboardConfigurationError: LocalizedError, Equatable {
         case .tvRemoteNeedsADevice(let cardType):
             return "Card '\(cardType)' needs a tv, a box, or both."
         case .unknownLockScreenKey(let name, let cardType):
-            return "Card '\(cardType)' can't put '\(name)' on the Lock Screen: use open, or tv. or box. and a key, like box.playPause."
+            return "Card '\(cardType)' can't put '\(name)' on the Lock Screen: use open, tv. or box. and a key, like box.playPause, or app. and one of the TV's apps, like app.Netflix."
+        case .tvAppsNeedAMediaPlayer(let cardType):
+            return "Card '\(cardType)' has TV apps but no tv.mediaPlayer to open them with."
+        case .tvAppColor(let name, let cardType):
+            return "Card '\(cardType)' gives TV app '\(name)' a color that isn't #RRGGBB."
         case .roomHotspotOutsideImage(let entityID, let cardType):
             return "Card '\(cardType)' places \(entityID) outside its image: x and y go from 0 to 1."
         }

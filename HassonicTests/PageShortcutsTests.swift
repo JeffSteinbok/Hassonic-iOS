@@ -44,4 +44,20 @@ final class PageShortcutsTests: XCTestCase {
         router.handle(url: URL(string: "hassonic://remote")!)
         XCTAssertEqual(router.selectedTab, .dashboard("remote"))
     }
+
+    func testEachTVAppIsASiriApp_namedForItsTV() {
+        var tv = DashboardTVRemoteConfiguration.Device(kind: .samsung, remote: "remote.tv", mediaPlayer: "media_player.tv", power: "script.tv_power")
+        tv.apps = [.init(name: "Netflix"), .init(name: "Xfinity", source: "HDMI")]
+        let remote = DashboardTVRemoteConfiguration(title: "Family Room", tv: tv,
+                                                    box: .init(kind: .xfinity, remote: "remote.xfinity"))
+        let page = DashboardPageConfiguration(id: "remote", title: "Remote", systemIcon: "tv",
+                                              sections: [DashboardSectionConfiguration(title: nil, cards: [.tvRemote(remote)])])
+
+        let apps = TVAppEntity.all(in: [page])
+        XCTAssertEqual(apps.map(\.name), ["Netflix", "Xfinity"])
+        XCTAssertEqual(apps.map(\.tvName), ["Family Room TV", "Family Room TV"])
+        XCTAssertEqual(apps.map(\.source), ["Netflix", "HDMI"])
+        XCTAssertEqual(apps[0].actions, [.openApp(mediaPlayer: "media_player.tv", source: "Netflix", powerScript: "script.tv_power")])
+    }
 }
+
