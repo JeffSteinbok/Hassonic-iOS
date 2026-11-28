@@ -129,6 +129,10 @@ must be an SF Symbols name.
     kind: samsung
     remote: remote.family_room_samsung_tv
     mediaPlayer: media_player.family_room_samsung_tv
+    apps:                            # a page of app tiles beside the box's keys
+      - { name: Netflix, color: "#000000", image: /local/apps/netflix.png }
+      - { name: Xfinity, source: HDMI, color: "#5B2BD9" }   # an input: the box
+      - { name: Max, source: HBO Max, color: "#002BE7" }
   box:
     kind: xfinity
     remote: remote.xfinity
@@ -144,6 +148,7 @@ must be an SF Symbols name.
 | `mediaPlayer` | Optional. For Samsung, play/pause toggles through it; without one the key alternates pause and play. |
 | `name` | Optional; the panel's label. Defaults to "Samsung TV" or "Xfinity". |
 | `power` | Optional `script.*` the power key runs instead of sending the device's own power command. For a Samsung, whose network remote can turn it off but not on, point it at a script that sends the TV's IR power code through an IR blaster such as a Broadlink. |
+| `apps` | Optional, `tv` only, and needs `mediaPlayer`. Tiles that each open an app through `media_player.select_source`: a `name` for the tile, the app's `source` exactly as the TV's `source_list` spells it (defaults to `name`), a brand `color` (`#RRGGBB`), and an `image`, a logo at a Home Assistant path such as `/local/apps/netflix.png` (a file in `/config/www/apps/`). Without an image the tile shows the name on the colour. A `source` that's an input (`HDMI`) switches the TV to it, e.g. to the box. The app on screen gets a ring, and tapping one while the TV is off turns it on first (with `power` if set), waits for it, then opens the app. Each is also a Siri and Shortcuts action, "Open Netflix on the Family Room TV with Steinbok Home". |
 | `favorites` | Optional, `xfinity` only. Saved voice commands, offered by the ★ key beside the box panel's voice key: each a `name` for the menu, what to `say`, and an optional SF Symbol `icon`. |
 
 At the card level, optional `box_sources` lists the TV's source labels that show
@@ -153,8 +158,14 @@ detection. Without it, standard inputs and unknown or renamed sources still
 keep the box controls usable. A source appearing in `source_list` alone is not
 proof that it is an app.
 
+With `apps` and a `box`, the box's panel has two pages: its keys, and the
+apps. Swipe across the panel to switch, or tap its dots; swiping anywhere else
+on a room page still changes rooms. It opens on the apps, unless the TV is on
+the box (one of `box_sources`, or any input), when it opens on the keys, and it
+follows the TV when it switches to or away from the box.
+
 The box panel is disabled only when the TV is known to be off, showing a
-recognized built-in app, or Home Assistant is disconnected. A visible caption
+recognized built-in app, or Home Assistant is disconnected. A caption beside the page dots
 explains why (for example, "TV is showing Netflix"). Uncertain TV state never
 disables an otherwise connected remote.
 
@@ -167,6 +178,11 @@ An `xfinity` box panel has a voice key. Tap it and say what you'd say into the
 box's own voice remote ("watch ESPN", "show me comedies"); the words go to the
 box through the integration's `xfinity_remote.send_text` once you stop talking.
 With `favorites`, a ★ key beside it opens a menu of them.
+
+`lockScreen` picks the keys the page's pinned Lock Screen activity shows, in
+order: `open` for the page, `tv.` or `box.` and a key (`tv.power`,
+`box.playPause`), or `app.` and the name of one of the TV's apps
+(`app.Netflix`).
 
 Each card type is written for one kind of entity or integration: `light`, `cover`,
 `alarm` and `people` work with any entity of their domain, while

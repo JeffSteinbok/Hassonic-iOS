@@ -348,4 +348,145 @@ final class TVRemoteTests: XCTestCase {
         """)
         XCTAssertNil(remote.runningApp(source: "Netflix", sourceList: ["Netflix"]))
     }
+
+    // MARK: Apps
+
+    /// The household's own row, with the TV's names for each app.
+    private func withApps() throws -> DashboardTVRemoteConfiguration {
+        try card("""
+                    title: Family Room
+                    tv:
+                      kind: samsung
+                      remote: remote.family_room_samsung_tv
+                      mediaPlayer: media_player.family_room_samsung_tv
+                      power: script.family_room_samsung_tv_power_toggle
+                      apps:
+                        - { name: Netflix, color: "#000000", image: /local/apps/netflix.png }
+                        - { name: Xfinity, source: HDMI, color: "#5A23B9" }
+                        - { name: Prime Video }
+                        - { name: Max, source: HBO Max }
+                        - { name: Hulu }
+                    box:
+                      kind: xfinity
+                      remote: remote.xfinity
+                    box_sources: [Comcast]
+        """)
+    }
+
+    func testAppsAreParsedInOrder() throws {
+        let remote = try withApps()
+        XCTAssertEqual(remote.tvApps.map(\.name), ["Netflix", "Xfinity", "Prime Video", "Max", "Hulu"])
+        XCTAssertEqual(remote.tvApps[0].color, "#000000")
+        XCTAssertEqual(remote.tvApps[0].image, "/local/apps/netflix.png")
+        XCTAssertNil(remote.tvApps[2].image)
+        XCTAssertEqual(remote.tvApps.map { $0.systemImage(on: .samsung) },
+                       ["play.tv", "tv.inset.filled", "play.tv", "play.tv", "play.tv"])
+    }
+
+    func testEachAppSelectsItsSource() throws {
+        let remote = try withApps()
+        XCTAssertEqual(remote.tvApps.compactMap(\.tvSource), ["Netflix", "HDMI", "Prime Video", "HBO Max", "Hulu"])
+        XCTAssertEqual(remote.appActions(remote.tvApps[3]),
+                       [.openApp(mediaPlayer: tvPlayer, source: "HBO Max", powerScript: "script.family_room_samsung_tv_power_toggle")])
+    }
+
+    func testTheBoxIsItsSourcesOrAnyInput() throws {
+        let remote = try withApps()
+        for source in ["Comcast", "comcast ", "TV/HDMI", "HDMI", "HDMI2"] {
+            XCTAssertTrue(remote.tvIsOnBox(source: source), source)
+        }
+        for source in ["Netflix", "YouTube", "", "Xfinity Stream"] {
+            XCTAssertFalse(remote.tvIsOnBox(source: source), source)
+        }
+        XCTAssertFalse(remote.tvIsOnBox(source: nil))
+        let noBox = try card("""
+                    tv: { kind: samsung, remote: remote.tv, mediaPlayer: media_player.tv, apps: [{ name: Netflix }] }
+                    box_sources: [Comcast]
+        """)
+        XCTAssertFalse(noBox.tvIsOnBox(source: "Comcast"))
+    }
+
+    func testTheCurrentAppIsTheOneOnScreen() throws {
+        let remote = try withApps()
+        XCTAssertEqual(remote.currentTVApp(source: "Netflix")?.name, "Netflix")
+        XCTAssertEqual(remote.currentTVApp(source: "HBO Max")?.name, "Max")
+        XCTAssertEqual(remote.currentTVApp(source: "netflix ")?.name, "Netflix")
+        // On the box, by its renamed input or Samsung's TV/HDMI for any
+        // port: the app that's an input.
+        XCTAssertEqual(remote.currentTVApp(source: "Comcast")?.name, "Xfinity")
+        XCTAssertEqual(remote.currentTVApp(source: "TV/HDMI")?.name, "Xfinity")
+        XCTAssertNil(remote.currentTVApp(source: "YouTube"))
+        XCTAssertNil(remote.currentTVApp(source: nil))
+        XCTAssertNil(remote.currentTVApp(source: ""))
+    }
+
+    func testAppsNeedAMediaPlayer() {
+        XCTAssertEqual(error("""
+                    tv:
+                      kind: samsung
+                      remote: remote.tv
+                      apps: [{ name: Netflix }]
+        """), .tvAppsNeedAMediaPlayer(cardType: "tv_remote"))
+    }
+
+    func testAnAppsColourIsHex() {
+        XCTAssertEqual(error("""
+                    tv:
+                      kind: samsung
+                      remote: remote.tv
+                      mediaPlayer: media_player.tv
+                      apps: [{ name: Netflix, color: red }]
+        """), .tvAppColor("Netflix", cardType: "tv_remote"))
+        XCTAssertTrue(DashboardTVRemoteConfiguration.TVApp.isHexColor("#E50914"))
+        XCTAssertFalse(DashboardTVRemoteConfiguration.TVApp.isHexColor("E50914"))
+        XCTAssertFalse(DashboardTVRemoteConfiguration.TVApp.isHexColor("#E5091"))
+    }
+
+    func testAppsCanGoOnTheLockScreen_butOnlyOnesOnTheRow() throws {
+        XCTAssertNoThrow(try card("""
+                    tv: { kind: samsung, remote: remote.tv, mediaPlayer: media_player.tv, apps: [{ name: Netflix }] }
+                    lockScreen: [open, app.Netflix]
+        """))
+        XCTAssertEqual(error("""
+                    tv: { kind: samsung, remote: remote.tv, mediaPlayer: media_player.tv, apps: [{ name: Netflix }] }
+                    lockScreen: [app.Hulu]
+        """), .unknownLockScreenKey("app.Hulu", cardType: "tv_remote"))
+    }
+
+    // MARK: Opening an app
+
+    private func tv(_ state: String) -> HAEntityState {
+        HAEntityState(entityId: tvPlayer, state: state, attributes: [:])
+    }
+
+    func testOpeningAnAppOnAnOnTVJustSelectsIt() async {
+        let client = MockHAClient()
+        client.simulateConnected(entities: [tv("on")])
+        await DashboardCardActionRouter.openApp("Netflix", on: tvPlayer, powerScript: "script.power", client: client, sleep: { _ in })
+        XCTAssertEqual(client.serviceCallLog.map(\.method), ["selectSource:Netflix"])
+    }
+
+    func testOpeningAnAppOnAnOffTVTurnsItOnFirst_andWaitsForIt() async {
+        let client = MockHAClient()
+        client.simulateConnected(entities: [tv("off")])
+        var naps = 0
+        await DashboardCardActionRouter.openApp("Hulu", on: tvPlayer, powerScript: "script.power", client: client, sleep: { _ in
+            naps += 1
+            if naps == 3 { client.simulateConnected(entities: [self.tv("on")]) }
+        })
+        XCTAssertEqual(client.serviceCallLog.map { "\($0.entityId) \($0.method)" },
+                       ["script.power runScript", "\(tvPlayer) selectSource:Hulu"])
+        // Three half-seconds until it's on, then the settle.
+        XCTAssertEqual(naps, 4)
+    }
+
+    func testWithoutAPowerScriptTheMediaPlayerTurnsItOn() async {
+        let client = MockHAClient()
+        client.simulateConnected(entities: [tv("standby")])
+        var naps = 0
+        await DashboardCardActionRouter.openApp("Netflix", on: tvPlayer, powerScript: nil, client: client, sleep: { _ in naps += 1 })
+        XCTAssertEqual(client.serviceCallLog.map(\.method), ["turnOn", "selectSource:Netflix"])
+        // It never came on: gave up after the timeout and sent it anyway.
+        XCTAssertEqual(naps, 41)
+    }
 }

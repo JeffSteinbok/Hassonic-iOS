@@ -9,24 +9,38 @@ import SwiftUI
 ///     VOL    ( round pad )      ⌂
 ///      🔇                        ↩  ⏯  123
 ///
-///     XFINITY
-///     PG   A ◇ B   CH
-///          C ◇ D
-///     ↩  Exit  Guide  i  Xfinity
-///     ⏪  ⏯  ⏩  ⏺  123
+///     XFINITY                   |  APPS
+///     PG   A ◇ B   CH           |  [Netflix] [Xfinity]
+///          C ◇ D                |  [Prime]   [HBO Max]
+///     ↩  Exit  Guide  i  Xfinity|  [Hulu            ]
+///     ⏪  ⏯  ⏩  ⏺  123          |
+///     TV is off             ● ○
+///
+/// With TV apps, the box's panel is the first of two pages, the apps the
+/// second: swipe across the panel to switch (a swipe anywhere else in a room
+/// still changes rooms). It opens on the apps unless the TV is on the box.
 struct TVRemoteCardView: View {
     let configuration: DashboardTVRemoteConfiguration
     /// The app the TV is in, if it certainly is one: shown on the TV panel,
     /// and the box panel is greyed out, since the box isn't on screen.
     var tvApp: String? = nil
+    /// The TV media player's `source`: picks the app that's lit, and which
+    /// page the box's panel opens on.
+    var tvSource: String? = nil
     /// The TV is off: every key but its power is greyed out, the box's too,
     /// since nothing they send would show.
     var tvIsOff = false
     /// Asks Home Assistant to re-read the TV's state, which otherwise can
     /// lag a power-on by many seconds.
     var refreshTV: () -> Void = {}
+    /// Fetches an app tile's logo, a Home Assistant path.
+    var loadAppImage: (String) async -> UIImage? = { _ in nil }
     let isAvailable: Bool
     let perform: ([TVRemoteAction]) -> Void
+
+    /// Which page of the box's panel is showing, when it has the apps too.
+    enum BoxPage: Hashable { case keys, apps }
+    @State private var boxPage: BoxPage?
 
     @State private var presses = 0
     /// Power was pressed while the TV was off: treat it as on until Home
@@ -43,32 +57,8 @@ struct TVRemoteCardView: View {
             if let tv = configuration.tv {
                 TVPanel(name: tv.displayName, app: tvApp, isOff: isOff, press: { press($0, on: .tv) }, showKeypad: { keypad = .tv })
             }
-            if let box = configuration.box {
-                if let reason = boxDisabledReason {
-                    Label(reason, systemImage: "info.circle")
-                        .font(.footnote).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .accessibilityIdentifier("remote.boxDisabledReason")
-                }
-                BoxPanel(name: box.displayName, menuLabel: box.kind.displayName,
-                         voice: configuration.boxTakesVoice ? BoxPanel.Voice(
-                            isListening: voice.state == .listening,
-                            caption: voice.state == .listening ? (voice.transcript.isEmpty ? "Listening…" : voice.transcript) : voiceNote,
-                            favorites: configuration.voiceFavorites,
-                            toggle: toggleVoice,
-                            send: sendVoice
-                         ) : nil,
-                         press: { press($0, on: .box) }, showKeypad: { keypad = .box })
-                    .disabled(boxIsIdle)
-                    // Dimmed darker rather than faded, which would wash a
-                    // dark panel out to grey on a light background.
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 26, style: .continuous)
-                            .fill(.black.opacity(isOff ? 0.75 : boxIsIdle ? 0.55 : 0))
-                            .allowsHitTesting(false)
-                    }
-                    .animation(.easeInOut(duration: 0.2), value: [isOff, boxIsIdle])
-                    .accessibilityHint(boxDisabledReason ?? "")
+            if configuration.box != nil || !configuration.tvApps.isEmpty {
+                boxArea
             }
         }
         .disabled(!isAvailable)
@@ -110,6 +100,123 @@ struct TVRemoteCardView: View {
     }
 
     private var isOff: Bool { tvIsOff && assumedOnUntil == nil }
+
+    /// The box's panel, and the apps beside it as a second page, with dots
+    /// and why the box is greyed out on one line underneath.
+    @ViewBuilder
+    private var boxArea: some View {
+        let apps = configuration.tvApps
+        let hasBox = configuration.box != nil
+        VStack(spacing: 8) {
+            if hasBox, !apps.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(alignment: .top, spacing: 12) {
+                        boxPanel
+                            .containerRelativeFrame(.horizontal)
+                            .id(BoxPage.keys)
+                        appsPanel(apps)
+                            .frame(maxHeight: .infinity)
+                            .containerRelativeFrame(.horizontal)
+                            .id(BoxPage.apps)
+                    }
+                    // Both pages as tall as the taller: the box's keys.
+                    .fixedSize(horizontal: false, vertical: true)
+                    .scrollTargetLayout()
+                }
+                .scrollTargetBehavior(.viewAligned)
+                .scrollIndicators(.hidden)
+                .scrollPosition(id: $boxPage)
+                .accessibilityIdentifier("remote.boxPager")
+            } else if hasBox {
+                boxPanel
+            } else {
+                appsPanel(apps)
+            }
+            // The apps work while the TV is off (opening one turns it on), so
+            // their page only says so; the box's says why it's greyed out.
+            let reason = shownPage == .keys ? boxDisabledReason
+                : !isAvailable ? "Home Assistant is disconnected" : isOff ? "TV is off" : nil
+            if reason != nil || (hasBox && !apps.isEmpty) {
+                HStack(spacing: 8) {
+                    if let reason {
+                        Label(reason, systemImage: "info.circle")
+                            .font(.footnote).foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .accessibilityIdentifier("remote.boxDisabledReason")
+                    }
+                    Spacer(minLength: 0)
+                    if hasBox, !apps.isEmpty {
+                        BoxPageDots(page: shownPage, select: turn(to:))
+                    }
+                }
+                .frame(minHeight: 24)
+                .padding(.horizontal, 4)
+                .animation(.easeInOut(duration: 0.2), value: reason)
+            }
+        }
+        .onAppear {
+            if boxPage == nil { boxPage = defaultBoxPage }
+        }
+        .onChange(of: tvIsOnBox) { _, onBox in
+            // Follow the TV: onto the box's keys when it switches to the
+            // box, onto the apps when it leaves for one.
+            turn(to: onBox ? .keys : .apps)
+        }
+    }
+
+    private var boxPanel: some View {
+        let box = configuration.box
+        return BoxPanel(name: box?.displayName ?? "", menuLabel: box?.kind.displayName ?? "",
+                 voice: configuration.boxTakesVoice ? BoxPanel.Voice(
+                    isListening: voice.state == .listening,
+                    caption: voice.state == .listening ? (voice.transcript.isEmpty ? "Listening…" : voice.transcript) : voiceNote,
+                    favorites: configuration.voiceFavorites,
+                    toggle: toggleVoice,
+                    send: sendVoice
+                 ) : nil,
+                 press: { press($0, on: .box) }, showKeypad: { keypad = .box })
+            .disabled(boxIsIdle)
+            // Dimmed darker rather than faded, which would wash a
+            // dark panel out to grey on a light background.
+            .overlay {
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(.black.opacity(isOff ? 0.75 : boxIsIdle ? 0.55 : 0))
+                    .allowsHitTesting(false)
+            }
+            .animation(.easeInOut(duration: 0.2), value: [isOff, boxIsIdle])
+            .accessibilityHint(boxDisabledReason ?? "")
+    }
+
+    private func appsPanel(_ apps: [DashboardTVRemoteConfiguration.TVApp]) -> some View {
+        AppsPanel(apps: apps,
+                  current: isOff ? nil : configuration.currentTVApp(source: tvSource)?.id,
+                  loadImage: loadAppImage,
+                  open: open)
+    }
+
+    private var tvIsOnBox: Bool { !isOff && configuration.tvIsOnBox(source: tvSource) }
+
+    private var defaultBoxPage: BoxPage { tvIsOnBox ? .keys : .apps }
+
+    /// The page on screen, before the pager has reported one.
+    private var shownPage: BoxPage {
+        guard configuration.box != nil else { return .apps }
+        guard !configuration.tvApps.isEmpty else { return .keys }
+        return boxPage ?? defaultBoxPage
+    }
+
+    private func turn(to page: BoxPage) {
+        guard configuration.box != nil, !configuration.tvApps.isEmpty, page != boxPage else { return }
+        withAnimation(.snappy) { boxPage = page }
+    }
+
+    /// Opens an app, turning the TV on first if it's off.
+    private func open(_ app: DashboardTVRemoteConfiguration.TVApp) {
+        presses += 1
+        if isOff { assumedOnUntil = .now + 30 }
+        perform(configuration.appActions(app))
+    }
 
     /// The box isn't on screen: the TV is off, or showing one of its own apps.
     private var boxIsIdle: Bool { boxDisabledReason != nil }
@@ -413,6 +520,137 @@ private struct BoxPanel: View {
         }
         .buttonStyle(KeyStyle(shape: RoundedRectangle(cornerRadius: 12, style: .continuous), fill: RemoteColors.boxKey, pressed: RemoteColors.boxKeyPressed))
         .accessibilityLabel(label ?? key.label)
+    }
+}
+
+// MARK: - Apps panel
+
+/// The TV's apps as tiles in their brand colours, two to a row (a last one
+/// on its own takes the whole row), filling the panel's height. The one on
+/// screen gets a white ring.
+private struct AppsPanel: View {
+    typealias App = DashboardTVRemoteConfiguration.TVApp
+
+    let apps: [App]
+    /// The id of the app on screen.
+    let current: String?
+    let loadImage: (String) async -> UIImage?
+    let open: (App) -> Void
+
+    private var rows: [[App]] {
+        stride(from: 0, to: apps.count, by: 2).map { Array(apps[$0..<min($0 + 2, apps.count)]) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            PanelCaption("Apps")
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 10) {
+                    ForEach(row) { app in
+                        AppTile(app: app, isCurrent: app.id == current, loadImage: loadImage) { open(app) }
+                    }
+                }
+                .frame(minHeight: 64, maxHeight: .infinity)
+            }
+        }
+        .padding(16)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(RemoteColors.boxPanel, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .animation(.easeInOut(duration: 0.2), value: current)
+    }
+}
+
+private struct AppTile: View {
+    let app: DashboardTVRemoteConfiguration.TVApp
+    let isCurrent: Bool
+    let loadImage: (String) async -> UIImage?
+    let action: () -> Void
+
+    @State private var logo: UIImage?
+
+    private var color: Color { app.color.map { Color(hex: $0) } ?? RemoteColors.boxKey }
+
+    /// A light brand colour (Hulu's green) takes dark text.
+    private var isLight: Bool {
+        guard let hex = app.color, DashboardTVRemoteConfiguration.TVApp.isHexColor(hex),
+              let value = UInt32(hex.dropFirst(), radix: 16) else { return false }
+        let (r, g, b) = (Double(value >> 16 & 0xFF), Double(value >> 8 & 0xFF), Double(value & 0xFF))
+        return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6
+    }
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                if let logo {
+                    Image(uiImage: logo)
+                        .resizable()
+                        .scaledToFit()
+                        // The same size in a full-width tile as a half one.
+                        .frame(maxWidth: 130, maxHeight: 40)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                } else {
+                    Text(app.name)
+                        .font(.headline.weight(.heavy))
+                        .foregroundStyle(isLight ? Color.black : .white)
+                        .multilineTextAlignment(.center)
+                        .minimumScaleFactor(0.7)
+                        .padding(.horizontal, 8)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(color, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                // A ring a little outside the tile, so it reads on any colour.
+                RoundedRectangle(cornerRadius: 19, style: .continuous)
+                    .strokeBorder(.white, lineWidth: 2.5)
+                    .padding(-4)
+                    .opacity(isCurrent ? 1 : 0)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(PressScaleButtonStyle())
+        .accessibilityLabel("Open \(app.name)")
+        .accessibilityValue(isCurrent ? "On the TV" : "")
+        .accessibilityAddTraits(isCurrent ? .isSelected : [])
+        .accessibilityIdentifier("remote.app.\(app.name)")
+        .task(id: app.image) {
+            guard let path = app.image else { return }
+            logo = await loadImage(path)
+        }
+    }
+}
+
+/// The box panel's two page dots, the current one filled. Tap one, or swipe
+/// up or down with VoiceOver, to turn the page.
+private struct BoxPageDots: View {
+    let page: TVRemoteCardView.BoxPage
+    let select: (TVRemoteCardView.BoxPage) -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach([TVRemoteCardView.BoxPage.keys, .apps], id: \.self) { dot in
+                Circle()
+                    .fill(Color.primary.opacity(dot == page ? 0.85 : 0.25))
+                    .frame(width: 7, height: 7)
+                    .frame(width: 16, height: 24)
+                    .contentShape(Rectangle())
+                    .onTapGesture { select(dot) }
+            }
+        }
+        .animation(.snappy, value: page)
+        .sensoryFeedback(.selection, trigger: page)
+        .accessibilityElement()
+        .accessibilityLabel("Remote page")
+        .accessibilityValue(page == .keys ? "Box keys, 1 of 2" : "Apps, 2 of 2")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: select(.apps)
+            case .decrement: select(.keys)
+            @unknown default: break
+            }
+        }
+        .accessibilityIdentifier("remote.boxPageDots")
     }
 }
 

@@ -23,11 +23,15 @@ struct PinnedPageActivityAttributes: ActivityAttributes {
             /// Alternates KEY_PAUSE and KEY_PLAY, for a Samsung TV with no media player.
             case samsungPlayPause
             case runScript
+            /// `media_player.select_source` with `command`, turning the TV
+            /// on first if it's off, with `script` if there is one.
+            case openApp
         }
 
         let kind: Kind
         let entityId: String
         var command: String? = nil
+        var script: String? = nil
     }
 
     struct Key: Codable, Hashable, Identifiable {
