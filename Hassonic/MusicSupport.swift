@@ -116,31 +116,39 @@ struct BrowseThumbnailImage: View {
     }
 
     var body: some View {
+        artwork
+            .frame(width: thumbnailSize, height: thumbnailSize)
+            .task(id: thumbnailPath) { await load() }
+            .accessibilityHidden(true)
+    }
+
+    /// An artist's photo fills a circle; anything else is the square tile.
+    @ViewBuilder
+    private var artwork: some View {
+        if round, case .loaded(let image) = phase {
+            image
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: thumbnailSize, height: thumbnailSize)
+                .clipShape(Circle())
+        } else {
+            squareArtwork
+        }
+    }
+
+    private var squareArtwork: some View {
         ZStack {
             switch phase {
-            case .loaded(let image) where round:
+            case .loaded(let image):
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-                    .frame(width: thumbnailSize, height: thumbnailSize)
-                    .clipShape(Circle())
-            case .loaded(let image):
-                // Whole, never cropped: album art fills the square, anything
-                // wider or taller is letterboxed.
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color(.systemFill))
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
                     .frame(width: thumbnailSize, height: thumbnailSize)
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             default:
                 placeholderView
             }
         }
-        .frame(width: thumbnailSize, height: thumbnailSize)
-        .task(id: thumbnailPath) { await load() }
-        .accessibilityHidden(true)
     }
 
     private var placeholderView: some View {
