@@ -106,6 +106,66 @@ final class AppRouterTests: XCTestCase {
         XCTAssertEqual(router.roomPath, [])
     }
 
+    private func roomsSetUp() -> AppRouter {
+        let router = AppRouter()
+        let home = DashboardPageConfiguration(id: "home", title: "Home", systemIcon: "house", sections: [])
+        let kitchen = DashboardPageConfiguration(id: "kitchen", title: "Kitchen", systemIcon: "oven", sections: [], isRoom: true)
+        let remote = DashboardPageConfiguration(id: "remote", title: "Remote", systemIcon: "tv", sections: [])
+        let den = DashboardPageConfiguration(id: "den", title: "Den", systemIcon: "sofa", sections: [], isRoom: true)
+        let office = DashboardPageConfiguration(id: "office", title: "Office", systemIcon: "desktopcomputer", sections: [], isRoom: true)
+        router.setDashboardPages([home, kitchen, remote, den, office])
+        return router
+    }
+
+    /// Swiping goes through the rooms in the order their tiles are on Home.
+    func testRoomsSwipeInTheirOrderOnHome() {
+        XCTAssertEqual(roomsSetUp().roomIDs, ["kitchen", "den", "office"])
+    }
+
+    func testOpeningARoomShowsIt() {
+        let router = roomsSetUp()
+        router.openRoom("den")
+        XCTAssertEqual(router.roomPath, ["den"])
+        XCTAssertEqual(router.visibleRoomID, "den")
+    }
+
+    /// A link for another room while one's open turns the pager to it,
+    /// rather than pushing a second room on top, so Back still goes Home.
+    func testARoomLinkWhileInARoomTurnsThePage() throws {
+        let router = roomsSetUp()
+        router.openRoom("kitchen")
+        router.visibleRoomID = "den"  // swiped
+        router.navigate(to: .tab(.dashboard("remote")))
+
+        router.handle(url: try XCTUnwrap(URL(string: "hassonic://office")))
+
+        XCTAssertEqual(router.selectedTab, .dashboard("home"))
+        XCTAssertEqual(router.roomPath, ["kitchen"])
+        XCTAssertEqual(router.visibleRoomID, "office")
+    }
+
+    /// Back to Home and into another tile: that room, not the last one swiped to.
+    func testGoingBackAndOpeningAnotherTileShowsThatRoom() {
+        let router = roomsSetUp()
+        router.openRoom("kitchen")
+        router.visibleRoomID = "office"
+        router.roomPath = []
+        XCTAssertNil(router.visibleRoomID)
+
+        router.roomPath = ["den"]  // the tile's NavigationLink
+        XCTAssertEqual(router.visibleRoomID, "den")
+    }
+
+    func testASwipedToRoomThatGoesAwayFallsBackToTheOneOpened() {
+        let router = roomsSetUp()
+        router.openRoom("kitchen")
+        router.visibleRoomID = "office"
+        let home = DashboardPageConfiguration(id: "home", title: "Home", systemIcon: "house", sections: [])
+        let kitchen = DashboardPageConfiguration(id: "kitchen", title: "Kitchen", systemIcon: "oven", sections: [], isRoom: true)
+        router.setDashboardPages([home, kitchen])
+        XCTAssertEqual(router.visibleRoomID, "kitchen")
+    }
+
     func testRemovingSelectedDashboardPageSelectsFirstRemainingPage() {
         let router = AppRouter()
         let home = DashboardPageConfiguration(id: "home", title: "Home", systemIcon: "house", sections: [])

@@ -7,14 +7,19 @@ struct DashboardPageView: View {
     var isInMoreTab = false
     /// The room pages, shown as tiles at the top of the first page.
     var rooms: [DashboardPageConfiguration] = []
-    /// Pushed from a room tile: the page above supplies the navigation bar.
-    var isPushed = false
+    /// One page of the room pager, which owns the title, the toolbar and
+    /// the space for its dots at the bottom.
+    var isInRoomPager = false
 
     @EnvironmentObject private var configurationLoader: AppConfigurationLoader
     @EnvironmentObject private var router: AppRouter
 
     var body: some View {
-        if isInMoreTab || isPushed {
+        if isInRoomPager {
+            scrollContent
+                // Room for the pager's dots above the tab bar.
+                .contentMargins(.bottom, RoomPager.dotsClearance, for: .scrollContent)
+        } else if isInMoreTab {
             content
         } else if !rooms.isEmpty {
             // The router owns the path, so a link can open a room.
@@ -47,7 +52,7 @@ struct DashboardPageView: View {
         }
     }
 
-    private var content: some View {
+    private var scrollContent: some View {
         ScrollView {
             if fitsScreen {
                 // Still in a scroll view, for pull-to-refresh; it never has
@@ -67,11 +72,15 @@ struct DashboardPageView: View {
             }
         }
         .reloadsConfigurationOnPull()
+    }
+
+    private var content: some View {
+        scrollContent
         .navigationTitle(page.title)
         .navigationBarTitleDisplayMode(page.isRoom ? .large : .inline)
         .toolbar {
-            // Under More, or pushed from a room tile, the leading spot is the back button.
-            ToolbarItem(placement: isInMoreTab || isPushed ? .topBarTrailing : .topBarLeading) {
+            // Under More, the leading spot is the back button.
+            ToolbarItem(placement: isInMoreTab ? .topBarTrailing : .topBarLeading) {
                 AppMenuButton(page: AppPage(id: page.id, title: page.title, systemIcon: page.systemIcon))
             }
             // A remote is what you want back in a hurry, mid-show.
@@ -82,8 +91,8 @@ struct DashboardPageView: View {
             }
         }
         .navigationDestination(for: String.self) { roomID in
-            if let room = rooms.first(where: { $0.id == roomID }) {
-                DashboardPageView(page: room, isPushed: true)
+            if rooms.contains(where: { $0.id == roomID }) {
+                RoomPager(rooms: rooms, enteredRoomID: roomID)
             }
         }
     }

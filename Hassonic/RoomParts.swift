@@ -56,6 +56,9 @@ struct RoomStatusChips: View {
                 }
                 .padding(.horizontal)
             }
+            // When they all fit there's nothing to scroll, so a swipe across
+            // them goes to the next room instead.
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         }
     }
 }
