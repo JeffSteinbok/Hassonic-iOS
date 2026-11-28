@@ -80,12 +80,22 @@ struct NowPlayingCard: View {
         VStack(spacing: 10) {
             ZStack(alignment: .bottom) {
                 if hasMedia {
-                    // The whole cover: the card is square (see below), so a
-                    // square cover fills it exactly, and one that isn't square
-                    // is letterboxed rather than cropped.
-                    SquareArtwork(url: presentation.artworkURL) {
-                        Color.gray.opacity(0.3)
-                    }
+                    // The card is wider than it is tall, so the cover can't fill
+                    // it without cropping. The same art, blurred, fills the card;
+                    // the whole cover sits on it, fitted into a square as tall as
+                    // the card. Art that isn't square just shows more backdrop.
+                    FillImage(url: presentation.artworkURL, fallback: .gray.opacity(0.3))
+                        .blur(radius: 30, opaque: true)
+                        .overlay(Color.black.opacity(0.2))
+                    Color.clear
+                        .aspectRatio(1, contentMode: .fit)
+                        .overlay {
+                            AsyncImage(url: presentation.artworkURL) { phase in
+                                if case .success(let image) = phase {
+                                    image.resizable().scaledToFit()
+                                }
+                            }
+                        }
                     // Bottom scrim: starts above centre so controls, progress, and
                     // title/artist are always readable regardless of artwork brightness.
                     LinearGradient(
@@ -172,12 +182,8 @@ struct NowPlayingCard: View {
                 }
                 .padding()
             }
-            // Square, like the cover, so it's shown whole. Capped so the card
-            // doesn't get enormous on iPad.
-            .aspectRatio(1, contentMode: .fit)
+            .frame(height: 320)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .frame(maxWidth: 420)
-            .frame(maxWidth: .infinity)
             .accessibilityIdentifier("now-playing-artwork-card")
 
             destinationButton
