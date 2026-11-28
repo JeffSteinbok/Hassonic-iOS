@@ -19,6 +19,8 @@ struct TVRemoteCardView: View {
     /// The app the TV is in, if it certainly is one: shown on the TV panel,
     /// and the box panel is greyed out, since the box isn't on screen.
     var tvApp: String? = nil
+    /// The TV media player's `source`, which picks the app button to light.
+    var tvSource: String? = nil
     /// The TV is off: every key but its power is greyed out, the box's too,
     /// since nothing they send would show.
     var tvIsOff = false
@@ -41,7 +43,10 @@ struct TVRemoteCardView: View {
     var body: some View {
         VStack(spacing: 12) {
             if let tv = configuration.tv {
-                TVPanel(name: tv.displayName, app: tvApp, isOff: isOff, press: { press($0, on: .tv) }, showKeypad: { keypad = .tv })
+                TVPanel(name: tv.displayName, app: tvApp, isOff: isOff,
+                        apps: configuration.tvApps,
+                        currentApp: isOff ? nil : configuration.currentTVApp(source: tvSource)?.id,
+                        press: { press($0, on: .tv) }, open: open, showKeypad: { keypad = .tv })
             }
             if let box = configuration.box {
                 BoxPanel(name: box.displayName, menuLabel: box.kind.displayName,
@@ -133,6 +138,13 @@ struct TVRemoteCardView: View {
         voiceNote = "“\(command)”"
     }
 
+    /// Opens an app, turning the TV on first if it's off.
+    private func open(_ app: DashboardTVRemoteConfiguration.TVApp) {
+        presses += 1
+        if isOff { assumedOnUntil = .now + 30 }
+        perform(configuration.appActions(app))
+    }
+
     private func press(_ key: TVRemoteKey, on side: TVRemoteSide) {
         presses += 1
         if key == .power, side == .tv {
@@ -173,10 +185,27 @@ private struct TVPanel: View {
     let app: String?
     /// Every key but power is greyed out.
     let isOff: Bool
+    /// The row of app buttons under the keys; none, no row.
+    var apps: [DashboardTVRemoteConfiguration.TVApp] = []
+    /// The id of the app button that's on screen, lit.
+    var currentApp: String?
     let press: (TVRemoteKey) -> Void
+    var open: (DashboardTVRemoteConfiguration.TVApp) -> Void = { _ in }
     let showKeypad: () -> Void
 
     var body: some View {
+        VStack(spacing: 14) {
+            keys
+            if !apps.isEmpty {
+                AppRow(apps: apps, current: currentApp, open: open)
+            }
+        }
+        .foregroundStyle(RemoteColors.label)
+        .padding(16)
+        .background(RemoteColors.tvPanel, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+    }
+
+    private var keys: some View {
         HStack(alignment: .top, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 // Room for the caption, which spans the panel's top.
@@ -228,9 +257,6 @@ private struct TVPanel: View {
             }
             .padding(.trailing, 60)
         }
-        .foregroundStyle(RemoteColors.label)
-        .padding(16)
-        .background(RemoteColors.tvPanel, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
     }
 
     private func roundKey(_ key: TVRemoteKey, systemImage: String, tint: Color? = nil) -> some View {
@@ -244,6 +270,48 @@ private struct TVPanel: View {
         }
         .buttonStyle(KeyStyle(shape: Circle(), fill: RemoteColors.tvKey, pressed: RemoteColors.tvKeyPressed))
         .accessibilityLabel("\(name) \(key.label)")
+    }
+}
+
+/// The TV's apps as a row of pill buttons, scrolling sideways when they don't
+/// fit, with the one on screen lit. Usable while the TV is off: opening one
+/// turns it on.
+private struct AppRow: View {
+    let apps: [DashboardTVRemoteConfiguration.TVApp]
+    let current: String?
+    let open: (DashboardTVRemoteConfiguration.TVApp) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(apps) { app in
+                    let isCurrent = app.id == current
+                    Button {
+                        open(app)
+                    } label: {
+                        HStack(spacing: 5) {
+                            if let icon = app.icon {
+                                Image(systemName: icon).font(.caption.weight(.semibold))
+                            }
+                            Text(app.name)
+                                .font(.subheadline.weight(.semibold))
+                                .lineLimit(1)
+                        }
+                        .foregroundStyle(isCurrent ? RemoteColors.tvPanel : RemoteColors.label)
+                        .padding(.horizontal, 14)
+                        .frame(height: 36)
+                    }
+                    .buttonStyle(KeyStyle(shape: Capsule(),
+                                          fill: isCurrent ? RemoteColors.label : RemoteColors.tvKey,
+                                          pressed: isCurrent ? RemoteColors.caption : RemoteColors.tvKeyPressed))
+                    .accessibilityLabel("Open \(app.name)")
+                    .accessibilityAddTraits(isCurrent ? .isSelected : [])
+                    .accessibilityIdentifier("remote.app.\(app.name)")
+                }
+            }
+        }
+        .scrollClipDisabled()
+        .animation(.easeInOut(duration: 0.2), value: current)
     }
 }
 

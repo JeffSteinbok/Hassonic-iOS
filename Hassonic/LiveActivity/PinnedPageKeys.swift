@@ -1,7 +1,7 @@
 import Foundation
 
 /// The keys a pinned page's Live Activity offers, from its first TV remote:
-/// the card's `lockScreen` list, or else the TV's power, volume and mute and
+/// the card's `lockScreen` list (which may name the TV's apps, `app.Netflix`), or else the TV's power, volume and mute and
 /// play/pause on the box (on the TV when there's no box). Kept free of
 /// ActivityKit so it can be tested.
 enum PinnedPageKeys {
@@ -25,6 +25,13 @@ enum PinnedPageKeys {
                 case .key(let key, let side):
                     let caption = remote.tv != nil && remote.box != nil ? remote.device(side)?.displayName : key.label
                     return self.key(key, on: side, of: remote, caption: caption)
+                case .app(let name):
+                    guard let app = remote.tvApp(named: name) else { return nil }
+                    let actions = remote.appActions(app).compactMap(action)
+                    guard !actions.isEmpty else { return nil }
+                    return Key(id: "app.\(app.name)", label: "Open \(app.name)",
+                               systemImage: app.icon ?? (app.isBox ? "tv.inset.filled" : "play.tv"),
+                               actions: actions, caption: app.name)
                 }
             }
         }
@@ -49,6 +56,8 @@ enum PinnedPageKeys {
         case .samsungPlayPause(let remote): return Action(kind: .samsungPlayPause, entityId: remote)
         case .runScript(let script): return Action(kind: .runScript, entityId: script)
         case .sendText: return nil
+        case .openApp(let mediaPlayer, let source, let powerScript):
+            return Action(kind: .openApp, entityId: mediaPlayer, command: source, script: powerScript)
         }
     }
 
@@ -58,6 +67,7 @@ enum PinnedPageKeys {
         case .mediaPlayPause: return .mediaPlayPause(mediaPlayer: action.entityId)
         case .samsungPlayPause: return .samsungPlayPause(remote: action.entityId)
         case .runScript: return .runScript(script: action.entityId)
+        case .openApp: return action.command.map { .openApp(mediaPlayer: action.entityId, source: $0, powerScript: action.script) }
         }
     }
 }

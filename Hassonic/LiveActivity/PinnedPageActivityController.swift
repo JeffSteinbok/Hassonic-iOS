@@ -77,7 +77,9 @@ final class PinnedPageActivityController: ObservableObject {
             Log.liveActivity.note("\(key.label) — couldn't reach Home Assistant")
             return
         }
-        DashboardCardActionRouter.perform(key.actions.compactMap(PinnedPageKeys.remoteAction), client: client)
+        // Awaited: opening an app can wait on the TV turning on, and iOS may
+        // suspend the app once this returns.
+        await DashboardCardActionRouter.run(key.actions.compactMap(PinnedPageKeys.remoteAction), client: client)
     }
 
     /// Clears the pin when it's swiped away, or when iOS ends it after its

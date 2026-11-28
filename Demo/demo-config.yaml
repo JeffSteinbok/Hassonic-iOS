@@ -28,7 +28,16 @@ pages:
       - cards:
           - type: tv_remote
             title: Living Room
-            tv: { kind: samsung, remote: remote.living_room_tv, mediaPlayer: media_player.living_room_tv }
+            tv:
+              kind: samsung
+              remote: remote.living_room_tv
+              mediaPlayer: media_player.living_room_tv
+              apps:
+                - { name: Cable, box: true }
+                - { name: Netflix }
+                - { name: Prime Video }
+                - { name: HBO Max }
+                - { name: Hulu }
             box:
               kind: xfinity
               remote: remote.cable_box

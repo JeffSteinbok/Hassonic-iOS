@@ -212,6 +212,7 @@ private struct DashboardCardView: View {
             TVRemoteCardView(
                 configuration: card,
                 tvApp: tvApp(card),
+                tvSource: card.tv?.mediaPlayer.flatMap { haClient.entity($0)?.attributeString("source") },
                 tvIsOff: card.tvIsOff(mediaPlayerState: card.tv?.mediaPlayer.flatMap { haClient.entity($0)?.state }),
                 refreshTV: {
                     guard let player = card.tv?.mediaPlayer else { return }

@@ -95,7 +95,8 @@ def entities(now: datetime, album_art: str) -> list:
         state("alarm_control_panel.home_alarm", "armed_home", {
             "friendly_name": "Home Alarm", "supported_features": 63, "code_arm_required": False}),
         state("media_player.living_room_tv", "on", {
-            "friendly_name": "Living Room TV", "source": "TV/HDMI", "source_list": ["TV/HDMI", "Netflix", "YouTube"]}),
+            "friendly_name": "Living Room TV", "source": "TV/HDMI",
+            "source_list": ["TV", "HDMI", "Netflix", "YouTube", "Prime Video", "HBO Max", "Hulu"]}),
         state("remote.living_room_tv", "on", {"friendly_name": "Living Room TV"}),
         state("remote.cable_box", "on", {"friendly_name": "Cable Box"}),
         state("media_player.spotify_alex", "playing", {

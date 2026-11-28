@@ -128,6 +128,10 @@ must be an SF Symbols name.
     kind: samsung
     remote: remote.family_room_samsung_tv
     mediaPlayer: media_player.family_room_samsung_tv
+    apps:                            # a row of app buttons on the TV panel
+      - { name: Xfinity, box: true } # the box's input
+      - { name: Netflix }
+      - { name: Max, source: HBO Max }
   box:
     kind: xfinity
     remote: remote.xfinity
@@ -143,6 +147,8 @@ must be an SF Symbols name.
 | `mediaPlayer` | Optional. For Samsung, play/pause toggles through it; without one the key alternates pause and play. |
 | `name` | Optional; the panel's label. Defaults to "Samsung TV" or "Xfinity". |
 | `power` | Optional `script.*` the power key runs instead of sending the device's own power command. For a Samsung, whose network remote can turn it off but not on, point it at a script that sends the TV's IR power code through an IR blaster such as a Broadlink. |
+| `apps` | Optional, `tv` only, and needs `mediaPlayer`. Buttons under the TV's keys, each opening an app through `media_player.select_source`: a `name` for the button, the app's `source` as the TV's `source_list` spells it (defaults to `name`), and an optional SF Symbol `icon`. `box: true` switches to the box's input instead. The one on screen is lit, and tapping one while the TV is off turns it on first (with `power` if set), waits for it, then opens the app. Each is also a Siri and Shortcuts action, "Open Netflix on the TV with Steinbok Home". |
+| `input` | Optional, `box` only. The TV source that shows the box, for an app with `box: true`. Defaults to `HDMI`, which is what Samsung lists its HDMI inputs as. |
 | `favorites` | Optional, `xfinity` only. Saved voice commands, offered by the ★ key beside the box panel's voice key: each a `name` for the menu, what to `say`, and an optional SF Symbol `icon`. |
 
 Each device gets its own panel and its keys always go to that device: the `tv`
@@ -154,6 +160,11 @@ An `xfinity` box panel has a voice key. Tap it and say what you'd say into the
 box's own voice remote ("watch ESPN", "show me comedies"); the words go to the
 box through the integration's `xfinity_remote.send_text` once you stop talking.
 With `favorites`, a ★ key beside it opens a menu of them.
+
+`lockScreen` picks the keys the page's pinned Lock Screen activity shows, in
+order: `open` for the page, `tv.` or `box.` and a key (`tv.power`,
+`box.playPause`), or `app.` and the name of one of the TV's apps
+(`app.Netflix`).
 
 Each card type is written for one kind of entity or integration: `light`, `cover`,
 `alarm` and `people` work with any entity of their domain, while

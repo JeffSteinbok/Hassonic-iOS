@@ -31,6 +31,15 @@ enum TVRemoteDeviceKind: String, Decodable, Equatable {
             return false
         }
     }
+
+    /// The source that shows the box when the card doesn't name one: Samsung
+    /// lists its HDMI inputs as one `HDMI`.
+    var defaultBoxInput: String? {
+        switch self {
+        case .samsung: return "HDMI"
+        case .xfinity: return nil
+        }
+    }
 }
 
 /// Which of the card's two panels.
@@ -223,6 +232,9 @@ enum TVRemoteAction: Equatable {
     case runScript(script: String)
     /// What you'd say into the box's voice remote, as text ("watch ESPN").
     case sendText(remote: String, text: String)
+    /// `media_player.select_source`, turning the TV on first if it's off:
+    /// with `powerScript` if there is one, else `media_player.turn_on`.
+    case openApp(mediaPlayer: String, source: String, powerScript: String?)
 }
 
 /// The `tv_remote` card.
@@ -232,6 +244,10 @@ enum TVRemoteAction: Equatable {
 ///       tv:  { kind: samsung, remote: remote.tv, mediaPlayer: media_player.tv }
 ///       box: { kind: xfinity, remote: remote.xfinity }
 ///       lockScreen: [open, tv.playPause, box.playPause]
+///
+/// A TV with a media player can also have `apps`, a row of buttons that each
+/// open one: `{ name: Netflix }`, `{ name: Max, source: HBO Max }`, or
+/// `{ name: Xfinity, box: true }` for the box's input.
 struct DashboardTVRemoteConfiguration: Decodable, Equatable {
     struct Device: Decodable, Equatable {
         let kind: TVRemoteDeviceKind
@@ -249,8 +265,30 @@ struct DashboardTVRemoteConfiguration: Decodable, Equatable {
         /// Saved spoken commands for a box that takes them, offered by its
         /// favorites key: `{ name: ESPN, say: "watch ESPN" }`.
         var favorites: [VoiceFavorite]?
+        /// For the TV: apps its panel offers as a row of buttons. Needs
+        /// `mediaPlayer`, which opens them.
+        var apps: [TVApp]?
+        /// For the box: the TV's source that shows it, which an app with
+        /// `box: true` switches to. Defaults to the TV kind's, e.g. `HDMI`.
+        var input: String?
 
         var displayName: String { name ?? kind.displayName }
+    }
+
+    /// An app on the TV's row of app buttons, opened through its media
+    /// player's `select_source`.
+    struct TVApp: Decodable, Equatable, Identifiable {
+        /// The button's label, and what Siri and the Lock Screen call it.
+        let name: String
+        /// The app's name in the TV's `source_list`; defaults to `name`.
+        var source: String?
+        /// Switches to the box's input instead of opening an app.
+        var box: Bool?
+        /// An SF Symbol before the name.
+        var icon: String?
+
+        var id: String { name }
+        var isBox: Bool { box == true }
     }
 
     /// A command you'd otherwise say, saved under a short name.
@@ -269,10 +307,18 @@ struct DashboardTVRemoteConfiguration: Decodable, Equatable {
     enum LockScreenKey: Equatable {
         case open
         case key(TVRemoteKey, TVRemoteSide)
+        /// `app.Netflix`: one of the TV's apps, by name.
+        case app(String)
 
         init?(_ name: String) {
             if name == "open" {
                 self = .open
+                return
+            }
+            if name.hasPrefix("app.") {
+                let app = String(name.dropFirst(4))
+                guard !app.isEmpty else { return nil }
+                self = .app(app)
                 return
             }
             let parts = name.split(separator: ".", maxSplits: 1).map(String.init)
@@ -333,6 +379,45 @@ struct DashboardTVRemoteConfiguration: Decodable, Equatable {
         return source
     }
 
+    /// The TV's app buttons, in order; none without a media player to open
+    /// them, and none for the box when there's no input to switch to.
+    var tvApps: [TVApp] {
+        guard let tv, tv.mediaPlayer != nil else { return [] }
+        return (tv.apps ?? []).filter { !$0.name.isEmpty && source(for: $0) != nil }
+    }
+
+    /// The app named `name` on the TV's row.
+    func tvApp(named name: String) -> TVApp? {
+        tvApps.first { $0.name == name }
+    }
+
+    /// The TV source an app button selects.
+    func source(for app: TVApp) -> String? {
+        if app.isBox {
+            guard let box, let tv else { return nil }
+            return box.input ?? tv.kind.defaultBoxInput
+        }
+        let source = (app.source ?? app.name).trimmingCharacters(in: .whitespacesAndNewlines)
+        return source.isEmpty ? nil : source
+    }
+
+    func appActions(_ app: TVApp) -> [TVRemoteAction] {
+        guard let tv, let mediaPlayer = tv.mediaPlayer, let source = source(for: app) else { return [] }
+        return [.openApp(mediaPlayer: mediaPlayer, source: source, powerScript: tv.power)]
+    }
+
+    /// The app button for what the TV is showing, from its media player's
+    /// `source`: the app whose source it is, or the box's button when it's on
+    /// an input, which Samsung reports for any HDMI port as `TV/HDMI`.
+    func currentTVApp(source: String?) -> TVApp? {
+        guard let tv, let source = source?.trimmingCharacters(in: .whitespacesAndNewlines), !source.isEmpty else { return nil }
+        let apps = tvApps
+        if let app = apps.first(where: { self.source(for: $0)?.caseInsensitiveCompare(source) == .orderedSame }) {
+            return app
+        }
+        return tv.kind.isInput(source) ? apps.first(where: \.isBox) : nil
+    }
+
     func actions(for key: TVRemoteKey, on side: TVRemoteSide) -> [TVRemoteAction] {
         guard let device = device(side) else { return [] }
         if key == .power, let power = device.power {
@@ -358,10 +443,19 @@ struct DashboardTVRemoteConfiguration: Decodable, Equatable {
         guard tv != nil || box != nil else {
             throw DashboardConfigurationError.tvRemoteNeedsADevice(cardType: cardType)
         }
+        if let tv, let apps = tv.apps, !apps.isEmpty {
+            guard tv.mediaPlayer != nil else {
+                throw DashboardConfigurationError.tvAppsNeedAMediaPlayer(cardType: cardType)
+            }
+            if let app = apps.first(where: { $0.isBox && box == nil }) {
+                throw DashboardConfigurationError.tvAppNeedsABox(app.name, cardType: cardType)
+            }
+        }
         for name in lockScreen ?? [] {
             switch LockScreenKey(name) {
             case .open: continue
             case .key(_, let side) where device(side) != nil: continue
+            case .app(let app) where tvApp(named: app) != nil: continue
             default: throw DashboardConfigurationError.unknownLockScreenKey(name, cardType: cardType)
             }
         }
