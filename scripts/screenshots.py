@@ -271,6 +271,8 @@ def main():
     parser.add_argument("--only", help="One screen by name: " + ", ".join(name for name, _, _ in SCREENS))
     parser.add_argument("--appearance", choices=["light", "dark"], default="light")
     parser.add_argument("--no-recents", action="store_true", help="Leave the Music tab's Recents row empty")
+    parser.add_argument("--start-volume", metavar="ZONE",
+                        help="Show the volume strip a start brings up, for this zone (e.g. media_player.kitchen_speaker)")
     parser.add_argument("--device", help="A simulator's UDID, instead of the first " + DEVICE)
     args = parser.parse_args()
 
@@ -302,7 +304,8 @@ def main():
     run("xcrun", "simctl", "ui", device, "appearance", args.appearance)
     # A light, with-recents run writes the README's files; any other
     # variant gets its own name beside them.
-    suffix = ("-dark" if args.appearance == "dark" else "") + ("-no-recents" if args.no_recents else "")
+    suffix = ("-dark" if args.appearance == "dark" else "") + ("-no-recents" if args.no_recents else "") \
+        + ("-start-volume" if args.start_volume else "")
 
     OUT.mkdir(parents=True, exist_ok=True)
     for name, link, extra in SCREENS:
@@ -311,6 +314,8 @@ def main():
         subprocess.run(["xcrun", "simctl", "terminate", device, bundle], capture_output=True)
         environment = {"SIMCTL_CHILD_HASSONIC_DEMO": str(demo), "SIMCTL_CHILD_HASSONIC_OPEN_URL": link}
         environment.update({f"SIMCTL_CHILD_{key}": value for key, value in extra.items()})
+        if args.start_volume:
+            environment["SIMCTL_CHILD_HASSONIC_DEMO_START_VOLUME"] = args.start_volume
         subprocess.run(["xcrun", "simctl", "launch", device, bundle], check=True, capture_output=True,
                        env={**__import__("os").environ, **environment})
         # A sheet slides up once the page has loaded.

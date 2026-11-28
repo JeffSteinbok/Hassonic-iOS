@@ -184,6 +184,8 @@ struct PlayOnSheet: View {
         switchProgress = 0
         zoneSwitchedAccount = false
         animateProgress(to: 0.15, over: 4)
+        // Speaker levels before anything moves; put back once it lands (see StartVolume).
+        let startVolume = StartVolumeGuard.shared.prepare(zone: zone, zones: zones, accountEntityId: mediaEntityId, client: haClient)
 
         Log.music.note("PlayOnSheet: [try] select_source \(mediaEntityId) → \(source)")
         var result = await haClient.selectSourceConfirmed(mediaEntityId, source: source)
@@ -257,6 +259,7 @@ struct PlayOnSheet: View {
             try? await Task.sleep(for: .milliseconds(200))
             activeSwitchZone = nil
             lastPlayOnSourceName = source
+            StartVolumeGuard.shared.protect(startVolume, client: haClient)
             zonePicked = true
             dismiss()
         case .timeout:

@@ -86,6 +86,7 @@ struct SpeakerRow: View {
 
                 Slider(value: $localVolume, in: 0...1, onEditingChanged: { editing in
                     isDraggingVolume = editing
+                    if editing { StartVolumeGuard.shared.userChangedVolume() }
                     if !editing {
                         haClient.setVolume(controlEntityId, level: localVolume)
                     }

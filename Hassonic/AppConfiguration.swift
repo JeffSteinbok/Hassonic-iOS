@@ -114,8 +114,11 @@ struct MediaConfiguration: Decodable, Equatable {
     /// button, generic copy — which is the right default, since every
     /// service call underneath is stock `media_player`.
     var provider: MediaProviderConfiguration?
+    /// What happens to speaker volumes when music starts. Absent means the
+    /// defaults: put back what the handoff lowered, and a floor of 0.2.
+    var startVolume = StartVolumeConfiguration()
 
-    private enum CodingKeys: String, CodingKey { case accounts, provider }
+    private enum CodingKeys: String, CodingKey { case accounts, provider, startVolume }
 
     init() {}
 
@@ -128,9 +131,13 @@ struct MediaConfiguration: Decodable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         if let v = try c.decodeIfPresent([MediaAccountConfiguration].self, forKey: .accounts) { accounts = v }
         provider = try c.decodeIfPresent(MediaProviderConfiguration.self, forKey: .provider)
+        if let v = try c.decodeIfPresent(StartVolumeConfiguration.self, forKey: .startVolume) { startVolume = v }
     }
 
     func validate() throws {
+        guard (0...1).contains(startVolume.floor) else {
+            throw AppConfigurationError.invalidStartVolumeFloor(startVolume.floor)
+        }
         var ids = Set<String>()
         for account in accounts {
             guard !account.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -150,6 +157,32 @@ struct MediaConfiguration: Decodable, Equatable {
             }
             try account.validateLiveActivityZones()
         }
+    }
+}
+
+/// Speaker volume when music starts. Handing playback to a speaker lets the
+/// service push its own remembered level onto it, often a quiet one; this
+/// undoes that. It only ever raises a speaker (a pinned speaker is set to its
+/// pin either way).
+struct StartVolumeConfiguration: Decodable, Equatable {
+    /// Put back any speaker the handoff turned down, to where it was just
+    /// before the start.
+    var restore: Bool = true
+    /// 0–1. A speaker still below this once music starts is raised to it.
+    /// 0 turns the floor off.
+    var floor: Double = 0.2
+
+    private enum CodingKeys: String, CodingKey { case restore, floor }
+
+    init(restore: Bool = true, floor: Double = 0.2) {
+        self.restore = restore
+        self.floor = floor
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        if let v = try c.decodeIfPresent(Bool.self, forKey: .restore) { restore = v }
+        if let v = try c.decodeIfPresent(Double.self, forKey: .floor) { floor = v }
     }
 }
 
@@ -312,6 +345,7 @@ enum AppConfigurationError: LocalizedError, Equatable {
     case tooManyLiveActivityZones(accountID: String, count: Int)
     case duplicateLiveActivityZone(accountID: String, entityID: String)
     case unknownLiveActivityZone(accountID: String, entityID: String)
+    case invalidStartVolumeFloor(Double)
 
     var errorDescription: String? {
         switch self {
@@ -329,6 +363,8 @@ enum AppConfigurationError: LocalizedError, Equatable {
             return "Media account '\(accountID)' lists '\(entityID)' in liveActivityZones more than once."
         case .unknownLiveActivityZone(let accountID, let entityID):
             return "Media account '\(accountID)' lists '\(entityID)' in liveActivityZones, but it isn't one of its enabled speakers or groups with a sourceName."
+        case .invalidStartVolumeFloor(let floor):
+            return "media.startVolume.floor is \(floor); it must be between 0 and 1."
         }
     }
 }

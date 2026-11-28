@@ -159,7 +159,15 @@ final class MusicStarter: ObservableObject {
             rememberedSource: rememberedSource(for: context))
         switch route {
         case .playHere:
-            startTask = Task { await play(request, context: context, client: client, canAsk: true) }
+            // Speaker levels before anything moves; put back once it lands
+            // (see StartVolume). A switch does this in the Play On sheet.
+            let startVolume = playingZone(for: context, client: client).map {
+                StartVolumeGuard.shared.prepare(zone: $0, zones: context.zones,
+                                                accountEntityId: context.accountEntityId, client: client)
+            }
+            startTask = Task {
+                await play(request, context: context, client: client, canAsk: true, startVolume: startVolume)
+            }
         case .switchTo(let zoneId):
             present(PlayOn(request: request, context: context, autoZone: context.zones.first { $0.id == zoneId }, notice: nil))
         case .ask:
@@ -217,7 +225,8 @@ final class MusicStarter: ObservableObject {
         self.playOn = playOn
     }
 
-    private func play(_ request: MusicStartRequest, context: MusicStartContext, client: any HAClientProtocol, canAsk: Bool) async {
+    private func play(_ request: MusicStartRequest, context: MusicStartContext, client: any HAClientProtocol, canAsk: Bool,
+                      startVolume: StartVolumeGuard.Pending? = nil) async {
         let account = context.accountEntityId
         let before = client.entity(account)
         let result = await client.playMediaChecked(account, contentType: request.contentType, contentId: request.contentId)
@@ -233,6 +242,7 @@ final class MusicStarter: ObservableObject {
         let canPickSpeaker = context.target == nil
         switch outcome {
         case .started:
+            if let startVolume { StartVolumeGuard.shared.protect(startVolume, client: client) }
             remember(request, account: account, client: client)
             onStarted()
         case .noSpeaker where canAsk && canPickSpeaker:
@@ -257,6 +267,15 @@ final class MusicStarter: ObservableObject {
             if MusicStart.hasStarted(before: before, now: client.entity(account)) { return true }
         }
         return false
+    }
+
+    /// The zone a `.playHere` start lands on: the room's, or wherever the
+    /// account is playing now.
+    private func playingZone(for context: MusicStartContext, client: any HAClientProtocol) -> MusicZone? {
+        if let target = context.target { return target }
+        guard let source = client.entity(context.accountEntityId)?.attributeString("source") ?? rememberedSource(for: context)
+        else { return nil }
+        return context.zones.first { $0.sourceName?.normalizedZoneSourceName == source.normalizedZoneSourceName }
     }
 
     private func rememberedSource(for context: MusicStartContext) -> String? {

@@ -298,6 +298,34 @@ button, and generic copy ("Start playing something on this speaker"). Only
 The account-switcher's VoiceOver hint is built from the accounts configured
 plus this name.
 
+## Volume when music starts
+
+Handing playback to a speaker lets the music service push its own remembered
+level onto it. With Spotify Connect on Echos, a group gets one level for every
+member, so a room can come up far quieter than it was left. So when music
+starts from the app or Siri, each speaker's level is noted just before the
+start. Once it's playing there, anything that went down is put back and
+anything still under a floor is raised to it. A speaker is never turned down
+this way. A speaker with `defaultVolume` (a fixed line-out) is reset to it,
+and its `proxy` (the receiver) is never touched.
+
+```yaml
+media:
+  startVolume:
+    restore: true   # put back what the handoff lowered (default true)
+    floor: 0.2      # 0–1; raise anything quieter to this (default 0.2, 0 = off)
+  accounts: [...]
+```
+
+Omit the block for the defaults. Moving a volume by hand in the first few
+seconds cancels the correction, so what you set stands.
+
+For a few seconds after a start, the Now Playing card shows a volume slider
+for the speaker it started on, so turning it up doesn't mean scrolling down to
+the speaker list.
+
+<img src="images/music-start-volume.png" width="300" alt="The Now Playing card with a Kitchen volume slider under it">
+
 ## Live Activity zone buttons
 
 The speaker Live Activity on the lock screen and in the Dynamic Island has

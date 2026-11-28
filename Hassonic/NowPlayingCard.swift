@@ -186,9 +186,15 @@ struct NowPlayingCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .accessibilityIdentifier("now-playing-artwork-card")
 
-            destinationButton
-                .opacity(hasMedia ? 1 : 0)
-                .allowsHitTesting(hasMedia)
+            // The strip is there even while hidden (it watches for a start),
+            // so it shares a stack with no spacing and pads itself.
+            VStack(spacing: 0) {
+                destinationButton
+                    .opacity(hasMedia ? 1 : 0)
+                    .allowsHitTesting(hasMedia)
+
+                StartVolumeStrip(accountEntityId: mediaEntityId, zones: zones)
+            }
         }
         .sheet(isPresented: $showingPlayOnSheet, onDismiss: {
             router.musicShowPlayOn = false
