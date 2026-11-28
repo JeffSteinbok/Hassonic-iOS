@@ -73,6 +73,18 @@ pages:
                 icon: lightbulb.slash.fill
                 off: [light.living_room_ceiling, light.living_room_floor_lamps, light.living_room_table_lamps]
 
+  # A second room, so the room pages swipe and show their dots.
+  - id: family_room
+    title: Family Room
+    system_icon: tv.fill
+    room: true
+    sections:
+      - cards:
+          - type: tv_remote
+            title: Family Room
+            tv: { kind: samsung, remote: remote.family_room_tv, mediaPlayer: media_player.family_room_tv }
+            box: { kind: xfinity, remote: remote.family_room_box }
+
   - id: people
     title: People
     system_icon: person.2.fill

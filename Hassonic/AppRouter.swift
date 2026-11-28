@@ -37,9 +37,22 @@ final class AppRouter: ObservableObject {
     @Published var presentedSheet: AppSheet?
     @Published private(set) var assistantStartsRecording = false
     /// The rooms pushed on the first page, which is where their tiles are.
-    @Published var roomPath: [String] = []
+    /// Only the room you came in on: swiping to the next one pages within
+    /// it (`visibleRoomID`) rather than pushing, so Back always goes Home.
+    @Published var roomPath: [String] = [] {
+        didSet {
+            guard roomPath != oldValue else { return }
+            visibleRoomID = roomPath.last
+        }
+    }
+    /// The room on screen in the room pager, which may not be the one in
+    /// `roomPath` once you've swiped.
+    @Published var visibleRoomID: String?
     private var dashboardPageIDs: Set<String> = ["home", "security"]
-    private var roomPageIDs: Set<String> = []
+    /// The rooms in the order their tiles are on Home, which is the order
+    /// you swipe through them.
+    private(set) var roomIDs: [String] = []
+    private var roomPageIDs: Set<String> { Set(roomIDs) }
     /// The first tab, which carries the room tiles.
     private var roomsHostPageID: String?
     private var assistantEnabled = false
@@ -76,9 +89,13 @@ final class AppRouter: ObservableObject {
 
     func setDashboardPages(_ pages: [DashboardPageConfiguration]) {
         let tabs = pages.filter { !$0.isRoom }
-        roomPageIDs = Set(pages.filter(\.isRoom).map(\.id))
+        roomIDs = pages.filter(\.isRoom).map(\.id)
         roomsHostPageID = tabs.first?.id
-        roomPath.removeAll { !roomPageIDs.contains($0) }
+        let rooms = roomPageIDs
+        roomPath.removeAll { !rooms.contains($0) }
+        if let visibleRoomID, !rooms.contains(visibleRoomID) {
+            self.visibleRoomID = roomPath.last
+        }
         dashboardPageIDs = Set(tabs.map(\.id))
         if case .dashboard(let selectedPageID) = selectedTab,
            !dashboardPageIDs.contains(selectedPageID) {
@@ -86,11 +103,17 @@ final class AppRouter: ObservableObject {
         }
     }
 
-    /// Opens a room: the first tab, with the room pushed on it.
+    /// Opens a room: the first tab, with the room pushed on it. If a room
+    /// is already open, the pager turns to this one instead of pushing
+    /// another on top.
     func openRoom(_ roomID: String) {
         guard roomPageIDs.contains(roomID), let roomsHostPageID else { return }
         selectedTab = .dashboard(roomsHostPageID)
-        roomPath = [roomID]
+        if roomPath.isEmpty {
+            roomPath = [roomID]
+        } else {
+            visibleRoomID = roomID
+        }
     }
 
     /// The tab last picked, if it still exists; otherwise the first page.

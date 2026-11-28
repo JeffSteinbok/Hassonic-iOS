@@ -44,6 +44,7 @@ PARK = (47.6806, -122.3290)
 SCREENS = [
     ("home", "hassonic://home", {}),
     ("room", "hassonic://living_room", {}),
+    ("room-next", "hassonic://family_room", {}),
     ("music", "hassonic://music", {}),
     ("remote", "hassonic://remote", {}),
     ("security", "hassonic://security", {}),
@@ -105,6 +106,10 @@ def entities(now: datetime, album_art: str) -> list:
             "friendly_name": "Living Room TV", "source": "TV/HDMI", "source_list": ["TV/HDMI", "Netflix", "YouTube"]}),
         state("remote.living_room_tv", "on", {"friendly_name": "Living Room TV"}),
         state("remote.cable_box", "on", {"friendly_name": "Cable Box"}),
+        state("media_player.family_room_tv", "on", {
+            "friendly_name": "Family Room TV", "source": "TV/HDMI", "source_list": ["TV/HDMI", "Netflix", "YouTube"]}),
+        state("remote.family_room_tv", "on", {"friendly_name": "Family Room TV"}),
+        state("remote.family_room_box", "on", {"friendly_name": "Family Room Box"}),
         state("media_player.spotify_alex", "playing", {
             "friendly_name": "Spotify Alex", "source": "Kitchen",
             "source_list": ["Kitchen", "Living Room", "Office", "Patio", "Downstairs"],
