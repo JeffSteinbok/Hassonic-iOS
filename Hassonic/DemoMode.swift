@@ -45,6 +45,12 @@ enum DemoMode {
         return HABrowseMediaResult(success: true, result: all[contentId ?? ""], error: nil)
     }
 
+    /// HASSONIC_DEMO_START_VOLUME: a zone whose just-started volume strip
+    /// shows on the Now Playing card, and stays.
+    static var startVolumeZone: String? {
+        ProcessInfo.processInfo.environment["HASSONIC_DEMO_START_VOLUME"]
+    }
+
     private static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase

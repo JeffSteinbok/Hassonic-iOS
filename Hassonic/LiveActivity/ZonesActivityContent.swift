@@ -42,9 +42,14 @@ enum ZonesActivityContent {
     /// volume lives on its proxy if it has one, and a speaker pinned at a
     /// fixed level with no proxy isn't adjustable at all.
     static func volumeEntityIds(for zone: MusicZone, in account: MediaAccount) -> [String] {
+        volumeEntityIds(for: zone, zones: account.zones)
+    }
+
+    /// The same, from an account's zone list alone.
+    static func volumeEntityIds(for zone: MusicZone, zones: [MusicZone]) -> [String] {
         let memberIds = zone.kind == .group ? zone.memberEntityIds : [zone.entityId]
         return memberIds.compactMap { memberId in
-            guard let speaker = account.zones.first(where: { $0.kind == .speaker && $0.entityId == memberId }) else {
+            guard let speaker = zones.first(where: { $0.kind == .speaker && $0.entityId == memberId }) else {
                 return memberId
             }
             guard speaker.isEnabled else { return nil }
@@ -78,7 +83,12 @@ enum ZonesActivityContent {
     }
 
     static func volume(of zone: ZonesActivityAttributes.Zone, entity: (String) -> HAEntityState?) -> Double? {
-        let levels = zone.volumeEntityIds.compactMap { entity($0)?.attributeDouble("volume_level") }
+        volume(of: zone.volumeEntityIds, entity: entity)
+    }
+
+    /// Average of these entities' levels; nil when none report one.
+    static func volume(of volumeEntityIds: [String], entity: (String) -> HAEntityState?) -> Double? {
+        let levels = volumeEntityIds.compactMap { entity($0)?.attributeDouble("volume_level") }
         guard !levels.isEmpty else { return nil }
         return levels.reduce(0, +) / Double(levels.count)
     }
@@ -93,11 +103,19 @@ enum ZonesActivityContent {
         settingTo level: Double,
         entity: (String) -> HAEntityState?
     ) -> [(entityId: String, level: Double)] {
+        volumes(of: zone.volumeEntityIds, settingTo: level, entity: entity)
+    }
+
+    static func volumes(
+        of volumeEntityIds: [String],
+        settingTo level: Double,
+        entity: (String) -> HAEntityState?
+    ) -> [(entityId: String, level: Double)] {
         func clamped(_ value: Double) -> Double { (min(max(value, 0), 1) * 100).rounded() / 100 }
-        let current = zone.volumeEntityIds.map { ($0, entity($0)?.attributeDouble("volume_level")) }
+        let current = volumeEntityIds.map { ($0, entity($0)?.attributeDouble("volume_level")) }
         let known = current.compactMap(\.1)
         guard !known.isEmpty else {
-            return zone.volumeEntityIds.map { ($0, clamped(level)) }
+            return volumeEntityIds.map { ($0, clamped(level)) }
         }
         let shift = level - known.reduce(0, +) / Double(known.count)
         return current.compactMap { entityId, volume in

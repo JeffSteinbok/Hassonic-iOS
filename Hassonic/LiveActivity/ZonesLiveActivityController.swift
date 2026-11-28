@@ -411,6 +411,7 @@ final class ZonesLiveActivityController {
 
         let targets = ZonesActivityContent.volumes(of: zone, settingTo: level, entity: entityWithOptimisticVolume)
         guard !targets.isEmpty else { return }
+        StartVolumeGuard.shared.userChangedVolume()
         let now = Date()
         for target in targets {
             client.setVolume(target.entityId, level: target.level)

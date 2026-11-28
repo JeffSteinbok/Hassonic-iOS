@@ -169,9 +169,12 @@ enum MusicByVoice {
             return "I couldn't reach Home Assistant."
         }
 
+        // Speaker levels before anything moves; put back once it lands (see StartVolume).
+        let startVolume = StartVolumeGuard.shared.prepare(zone: zone, zones: account.zones,
+                                                          accountEntityId: account.entityId, client: client)
         switch await client.selectSourceConfirmed(account.entityId, source: source) {
         case .alreadyActive, .confirmed:
-            return start(favorite, on: zone, source: source, account: account, client: client)
+            return start(favorite, on: zone, source: source, account: account, client: client, startVolume: startVolume)
         case .error(let message):
             return "I couldn't switch to \(zone.displayName): \(message)"
         case .timeout:
@@ -195,13 +198,15 @@ enum MusicByVoice {
             }
             // Its `source` lags the handoff; the claim confirming is enough.
             _ = await client.selectSourceConfirmed(account.entityId, source: source, timeout: .seconds(15))
-            _ = start(favorite, on: zone, source: source, account: account, client: client)
+            _ = start(favorite, on: zone, source: source, account: account, client: client, startVolume: startVolume)
         }
         return "Moving \(zone.displayName) to \(account.displayName)'s account. It'll start in a few seconds."
     }
 
     private static func start(_ favorite: MusicFavorite?, on zone: MusicZone, source: String,
-                              account: MediaAccount, client: HAWebSocketClient) -> String {
+                              account: MediaAccount, client: HAWebSocketClient,
+                              startVolume: StartVolumeGuard.Pending) -> String {
+        defer { StartVolumeGuard.shared.protect(startVolume, client: client) }
         // The Now Playing card's fallback for when HA omits `source` while paused.
         UserDefaults.standard.set(source, forKey: StorageKeys.lastPlayOnSource(account: account.entityId))
         if let favorite {

@@ -516,6 +516,7 @@ private struct SpeakerControls: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Mute")
             CommitSlider(label: "Volume", symbol: "speaker.wave.1", value: (entity.attributeDouble("volume_level") ?? 0) * 100) { percent in
+                StartVolumeGuard.shared.userChangedVolume()
                 haClient.setVolume(entity.entityId, level: percent / 100)
             }
         }
