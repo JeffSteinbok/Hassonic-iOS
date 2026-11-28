@@ -3,7 +3,8 @@ import SwiftUI
 /// The `room` card: status chips, the room's picture with a button on each
 /// device (tap toggles, long-press opens its controls; an appliance or sensor
 /// opens them on a tap, and shows its reading on the picture), lights glowing
-/// on the floor where they're on, quick actions, and what's playing.
+/// on the floor where they're on, quick actions, what's playing, and a
+/// button to start music on the room's speaker.
 struct RoomPlanCardView: View {
     let card: DashboardRoomCardConfiguration
 
@@ -43,6 +44,9 @@ struct RoomPlanCardView: View {
             }
 
             RoomNowPlaying(card: card)
+                .padding(.horizontal)
+
+            RoomMusicButton(card: card)
                 .padding(.horizontal)
         }
         .task(id: card.image) {

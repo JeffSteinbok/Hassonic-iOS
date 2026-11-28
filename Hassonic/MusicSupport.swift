@@ -89,6 +89,10 @@ struct BrowseThumbnailImage: View {
     let thumbnailPath: String?
     let baseURLString: String
     let accessToken: String?
+    /// Shown with no art, or art that won't load: the kind's own symbol.
+    var fallbackIcon: String = "music.note"
+    /// An artist: a round photo, like the provider apps.
+    var round: Bool = false
 
     @State private var phase: Phase = .idle
 
@@ -114,10 +118,20 @@ struct BrowseThumbnailImage: View {
     var body: some View {
         ZStack {
             switch phase {
-            case .loaded(let image):
+            case .loaded(let image) where round:
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fill)
+                    .frame(width: thumbnailSize, height: thumbnailSize)
+                    .clipShape(Circle())
+            case .loaded(let image):
+                // Whole, never cropped: album art fills the square, anything
+                // wider or taller is letterboxed.
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color(.systemFill))
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
                     .frame(width: thumbnailSize, height: thumbnailSize)
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             default:
@@ -130,12 +144,12 @@ struct BrowseThumbnailImage: View {
     }
 
     private var placeholderView: some View {
-        RoundedRectangle(cornerRadius: 6, style: .continuous)
+        RoundedRectangle(cornerRadius: round ? thumbnailSize / 2 : 6, style: .continuous)
             .fill(Color(.systemFill))
             .overlay(
-                Image(systemName: "music.note")
-                    .font(.system(size: 18))
-                    .foregroundStyle(.secondary)
+                Image(systemName: fallbackIcon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(Color.accentColor)
             )
     }
 
@@ -157,5 +171,14 @@ struct BrowseThumbnailImage: View {
             guard !Task.isCancelled else { return }
             phase = .failed
         }
+    }
+}
+
+extension View {
+    /// A sheet you can read: solid behind its rows, not the default glass
+    /// that lets the album art behind it show through the text. Keeps the
+    /// drawer's shape, and needs no Reduce Transparency special case.
+    func readableSheetBackground() -> some View {
+        presentationBackground(Color(.systemGroupedBackground))
     }
 }

@@ -59,6 +59,8 @@ final class HAWebSocketClient: ObservableObject, HAClientProtocol {
     private var subscribeEventsRequestId: Int?
     private var currentUserRequestId: Int?
     var browseMediaRequests: [Int: CheckedContinuation<HABrowseMediaResult, Never>] = [:]
+    /// Service calls whose answer someone is waiting on (see `playMediaChecked`).
+    var serviceCallRequests: [Int: CheckedContinuation<HAServiceCallResult, Never>] = [:]
 
     struct PendingSelectSource {
         /// The HA message id for the `select_source` service call.
@@ -193,6 +195,12 @@ final class HAWebSocketClient: ObservableObject, HAClientProtocol {
             continuation.resume(returning: HABrowseMediaResult(
                 success: false, result: nil, error: HAResultError(code: nil, message: "Lost the connection to Home Assistant")))
         }
+        let calls = serviceCallRequests
+        serviceCallRequests = [:]
+        for continuation in calls.values {
+            continuation.resume(returning: HAServiceCallResult(
+                success: false, error: HAResultError(code: nil, message: "Lost the connection to Home Assistant")))
+        }
     }
 
     private static func webSocketURL(from baseURL: URL) -> URL? {
@@ -321,6 +329,11 @@ final class HAWebSocketClient: ObservableObject, HAClientProtocol {
                     }
                     // Otherwise keep waiting for a state_changed event below.
                 }
+            } else if let id = envelope.id,
+                      let continuation = serviceCallRequests.removeValue(forKey: id) {
+                let result = (try? decoder.decode(HAServiceCallResult.self, from: data))
+                    ?? HAServiceCallResult(success: false, error: HAResultError(code: nil, message: "Unable to decode the service result"))
+                continuation.resume(returning: result)
             } else if let id = envelope.id,
                       let continuation = browseMediaRequests.removeValue(forKey: id) {
                 let result = (try? decoder.decode(HABrowseMediaResult.self, from: data))

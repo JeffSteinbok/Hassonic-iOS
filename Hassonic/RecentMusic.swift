@@ -90,6 +90,7 @@ final class RecentMusicStore: ObservableObject {
     @Published private(set) var service: [String: [RecentMusicItem]] = [:]
 
     private let defaults: UserDefaults
+    private var artworkLookedUp = Set<String>()
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -138,6 +139,18 @@ final class RecentMusicStore: ObservableObject {
             return entry
         }
         save(updated, account: account)
+    }
+
+    /// Entries the app recorded without art (a favorite, or a pick before
+    /// art was looked up), each looked up once a launch: one that can't be
+    /// browsed keeps its type icon rather than being asked for every time.
+    func fillMissingArtwork(account: String,
+                            browse: (_ type: String?, _ id: String?) async -> HABrowseMediaResult) async {
+        let missing = localItems(for: account).filter { $0.thumbnail == nil && !artworkLookedUp.contains("\(account)|\($0.id)") }
+        for item in missing {
+            artworkLookedUp.insert("\(account)|\(item.id)")
+            await fillArtwork(for: item.id, account: account, browse: browse)
+        }
     }
 
     #if DEBUG && targetEnvironment(simulator)

@@ -21,6 +21,12 @@ struct PlayOnSheet: View {
     /// for switches with no specific content in mind (e.g. just changing
     /// which zone is active).
     let desiredContentName: String?
+    /// Switch to this zone as soon as the sheet opens, without a tap: a
+    /// room's own speaker. The list stays, for picking another if it fails.
+    var autoStartZone: MusicZone? = nil
+    /// Why the sheet came up, when it wasn't asked for (playing directly
+    /// found no speaker).
+    var notice: String? = nil
     @EnvironmentObject private var haClient: HAWebSocketClient
     @Environment(\.dismiss) private var dismiss
 
@@ -37,6 +43,7 @@ struct PlayOnSheet: View {
     /// snaps quickly to the next checkpoint rather than waiting out the
     /// animation, so success never feels stuck behind a slow progress bar.
     @State private var switchProgress: Double = 0
+    @State private var didAutoStart = false
 
     private func castableZones(kind: MusicZone.Kind) -> [MusicZone] {
         zones
@@ -47,6 +54,17 @@ struct PlayOnSheet: View {
     var body: some View {
         NavigationStack {
             List {
+                if let notice, switchError == nil {
+                    Section {
+                        HStack(spacing: 12) {
+                            Image(systemName: "hifispeaker.badge.plus")
+                                .foregroundStyle(.blue)
+                            Text(notice)
+                                .foregroundStyle(.secondary)
+                                .font(.subheadline)
+                        }
+                    }
+                }
                 if let errorMessage = switchError {
                     Section {
                         HStack(spacing: 12) {
@@ -69,6 +87,12 @@ struct PlayOnSheet: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.medium, .large])
+        .readableSheetBackground()
+        .task {
+            guard !didAutoStart, let zone = autoStartZone, let source = zone.sourceName else { return }
+            didAutoStart = true
+            await performSwitch(source: source, zone: zone)
+        }
         // Mid-switch the sheet stays up: closing it would let the switch
         // finish behind it and leave the zone marked as picked.
         .interactiveDismissDisabled(activeSwitchZone != nil)

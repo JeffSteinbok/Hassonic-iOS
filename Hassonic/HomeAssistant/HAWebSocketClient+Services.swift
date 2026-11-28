@@ -18,8 +18,31 @@ extension HAWebSocketClient {
         send(HAPlayMediaMessage(id: nextId(), target: .init(entityId: entityId), serviceData: .init(mediaContentId: contentId, mediaContentType: contentType)))
     }
 
+    /// `play_media`, waiting for Home Assistant's answer: a provider with
+    /// nowhere to play (Spotify with no active device) fails the call, and
+    /// the fire-and-forget `playMedia` never hears about it.
+    func playMediaChecked(_ entityId: String, contentType: String, contentId: String) async -> HAServiceCallResult {
+        guard connectionState == .connected else {
+            return HAServiceCallResult(success: false, error: HAResultError(code: nil, message: "No connection to Home Assistant"))
+        }
+        let id = nextId()
+        return await withCheckedContinuation { continuation in
+            serviceCallRequests[id] = continuation
+            send(HAPlayMediaMessage(id: id, target: .init(entityId: entityId), serviceData: .init(mediaContentId: contentId, mediaContentType: contentType)))
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(15))
+                guard let self, let pending = self.serviceCallRequests.removeValue(forKey: id) else { return }
+                pending.resume(returning: HAServiceCallResult(
+                    success: false, error: HAResultError(code: nil, message: "Home Assistant didn't answer")))
+            }
+        }
+    }
+
     /// Answered by the socket's `result`, or failed if the socket goes first.
     func browseMedia(entityId: String, mediaContentType: String? = nil, mediaContentId: String? = nil) async -> HABrowseMediaResult {
+        #if DEBUG && targetEnvironment(simulator)
+        if let demo = DemoMode.browse(mediaContentId) { return demo }
+        #endif
         guard connectionState == .connected else {
             return HABrowseMediaResult(success: false, result: nil, error: HAResultError(code: nil, message: "No connection to Home Assistant"))
         }

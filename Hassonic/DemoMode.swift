@@ -24,6 +24,27 @@ enum DemoMode {
         ProcessInfo.processInfo.environment["HASSONIC_OPEN_HISTORY"]
     }
 
+    /// HASSONIC_OPEN_SHEET: a sheet to open for a screenshot. `room-music`
+    /// is a room's Play Music sheet; `play-on` the Music tab's Play On sheet
+    /// as it asks when there's no speaker to play on; `browse` Browse.
+    static var openSheet: String? {
+        ProcessInfo.processInfo.environment["HASSONIC_OPEN_SHEET"]
+    }
+
+    /// HASSONIC_BROWSE_AT: a folder id in `demo-browse.json` for Browse to
+    /// open at instead of the top.
+    static var browseStart: String? {
+        ProcessInfo.processInfo.environment["HASSONIC_BROWSE_AT"]
+    }
+
+    /// `demo-browse.json`: `{ "<content id>": node }`, the top under "".
+    static func browse(_ contentId: String?) -> HABrowseMediaResult? {
+        guard let directory,
+              let data = try? Data(contentsOf: directory.appendingPathComponent("demo-browse.json")),
+              let all = try? decoder.decode([String: HABrowseMediaNode].self, from: data) else { return nil }
+        return HABrowseMediaResult(success: true, result: all[contentId ?? ""], error: nil)
+    }
+
     private static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase

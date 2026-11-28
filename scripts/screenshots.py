@@ -40,15 +40,22 @@ HOME = (47.6205, -122.3493)
 WORK = (47.6097, -122.3331)
 PARK = (47.6806, -122.3290)
 
-# (file name, link to open, person whose history sheet opens)
+# (file name, link to open, extra launch environment: a sheet to open)
 SCREENS = [
-    ("home", "hassonic://home", None),
-    ("room", "hassonic://living_room", None),
-    ("music", "hassonic://music", None),
-    ("remote", "hassonic://remote", None),
-    ("security", "hassonic://security", None),
-    ("people", "hassonic://people", None),
-    ("history", "hassonic://people", "person.sam"),
+    ("home", "hassonic://home", {}),
+    ("room", "hassonic://living_room", {}),
+    ("music", "hassonic://music", {}),
+    ("remote", "hassonic://remote", {}),
+    ("security", "hassonic://security", {}),
+    ("people", "hassonic://people", {}),
+    ("history", "hassonic://people", {"HASSONIC_OPEN_HISTORY": "person.sam"}),
+    ("room-music", "hassonic://living_room", {"HASSONIC_OPEN_SHEET": "room-music"}),
+    ("play-on", "hassonic://music", {"HASSONIC_OPEN_SHEET": "play-on"}),
+    ("browse", "hassonic://music", {"HASSONIC_OPEN_SHEET": "browse"}),
+    ("browse-playlists", "hassonic://music",
+     {"HASSONIC_OPEN_SHEET": "browse", "HASSONIC_BROWSE_AT": "current_user_playlists"}),
+    ("browse-artists", "hassonic://music",
+     {"HASSONIC_OPEN_SHEET": "browse", "HASSONIC_BROWSE_AT": "current_user_followed_artists"}),
 ]
 
 
@@ -178,17 +185,68 @@ def recents(demo: Path) -> list:
     entries = [
         ("Long Light", "Album", (250, 170, 90), (160, 80, 150), (600, 600)),
         ("Morning Coffee", "Playlist", (120, 80, 50), (230, 200, 150), (600, 600)),
+        # No art and no icon: a playlist Home Assistant couldn't find art for.
+        ("Road Trip", "Playlist", None, None, None),
         ("Harbor Sessions", "Album", (40, 90, 160), (120, 200, 220), (600, 600)),
         ("The Lanterns", "Artist", (60, 60, 70), (200, 160, 90), (900, 600)),
         ("Dinner Jazz", "Playlist", (90, 20, 40), (220, 120, 80), (600, 600)),
     ]
     items = []
     for index, (title, kind, top, bottom, size) in enumerate(entries):
-        path = demo / f"recent-{index}.png"
-        cover(path, top, bottom, size)
-        items.append({"contentType": kind.lower(), "contentId": f"demo:{kind.lower()}:{index}",
-                      "title": title, "subtitle": kind, "thumbnail": path.as_uri()})
+        item = {"contentType": kind.lower(), "contentId": f"demo:{kind.lower()}:{index}", "title": title, "subtitle": kind}
+        if size:
+            path = demo / f"recent-{index}.png"
+            cover(path, top, bottom, size)
+            item["thumbnail"] = path.as_uri()
+        items.append(item)
     return items
+
+
+def browse(demo: Path) -> dict:
+    """Browse's library, shaped like Spotify's in Home Assistant: folders
+    told apart only by their ids, then playlists and artists inside."""
+    def folder(content_id, title, children_class):
+        return {"title": title, "media_class": "directory", "media_content_type": content_id,
+                "media_content_id": content_id, "can_play": False, "can_expand": True,
+                "children_media_class": children_class, "thumbnail": None}
+
+    def item(kind, index, title, top=None, bottom=None, size=(600, 600)):
+        node = {"title": title, "media_class": kind, "media_content_type": f"spotify://{kind}",
+                "media_content_id": f"demo:{kind}:{index}", "can_play": True, "can_expand": True, "thumbnail": None}
+        if top:
+            path = demo / f"browse-{kind}-{index}.png"
+            cover(path, top, bottom, size)
+            node["thumbnail"] = path.as_uri()
+        return node
+
+    root = {"title": "Spotify", "media_class": "directory", "media_content_type": "spotify://library",
+            "media_content_id": "library", "can_play": False, "can_expand": True, "children": [
+                folder("current_user_playlists", "Playlists", "playlist"),
+                folder("current_user_followed_artists", "Artists", "artist"),
+                folder("current_user_saved_albums", "Albums", "album"),
+                folder("current_user_saved_tracks", "Liked songs", "track"),
+                folder("current_user_saved_shows", "Podcasts", "podcast"),
+                folder("current_user_recently_played", "Recently played", "track"),
+                folder("current_user_top_artists", "Top Artists", "artist"),
+                folder("current_user_top_tracks", "Top Tracks", "track"),
+                folder("categories", "Categories", "genre"),
+                folder("featured_playlists", "Featured Playlists", "playlist"),
+                folder("new_releases", "New Releases", "album"),
+            ]}
+    playlists = dict(folder("current_user_playlists", "Playlists", "playlist"), children=[
+        item("playlist", 1, "Morning Coffee", (120, 80, 50), (230, 200, 150)),
+        item("playlist", 2, "Focus", (30, 60, 90), (90, 160, 200)),
+        item("playlist", 3, "Dinner Jazz", (90, 20, 40), (220, 120, 80)),
+        item("playlist", 4, "Road Trip"),
+        item("playlist", 5, "Rainy Day", (70, 80, 100), (170, 180, 200)),
+    ])
+    artists = dict(folder("current_user_followed_artists", "Artists", "artist"), children=[
+        item("artist", 1, "The Lanterns", (60, 60, 70), (200, 160, 90), (900, 600)),
+        item("artist", 2, "Harbor Lights", (40, 90, 160), (120, 200, 220)),
+        item("artist", 3, "June Avenue"),
+        item("artist", 4, "Paper Kites Club", (150, 60, 90), (240, 170, 120)),
+    ])
+    return {"": root, "current_user_playlists": playlists, "current_user_followed_artists": artists}
 
 
 def build(device_id):
@@ -233,6 +291,7 @@ def main():
     now = datetime.now(timezone.utc)
     (demo / "demo-entities.json").write_text(json.dumps(entities(now, (demo / "album.png").as_uri())))
     (demo / "demo-history.json").write_text(json.dumps(history(now)))
+    (demo / "demo-browse.json").write_text(json.dumps(browse(demo)))
     (demo / "demo-recents.json").write_text(json.dumps([] if args.no_recents else recents(demo)))
     config = (DEMO / "demo-config.yaml").read_text().replace("{{DEMO}}", demo.as_uri())
     (documents / "config-override.yaml").write_text(config)
@@ -246,16 +305,16 @@ def main():
     suffix = ("-dark" if args.appearance == "dark" else "") + ("-no-recents" if args.no_recents else "")
 
     OUT.mkdir(parents=True, exist_ok=True)
-    for name, link, history_for in SCREENS:
+    for name, link, extra in SCREENS:
         if args.only and name != args.only:
             continue
         subprocess.run(["xcrun", "simctl", "terminate", device, bundle], capture_output=True)
         environment = {"SIMCTL_CHILD_HASSONIC_DEMO": str(demo), "SIMCTL_CHILD_HASSONIC_OPEN_URL": link}
-        if history_for:
-            environment["SIMCTL_CHILD_HASSONIC_OPEN_HISTORY"] = history_for
+        environment.update({f"SIMCTL_CHILD_{key}": value for key, value in extra.items()})
         subprocess.run(["xcrun", "simctl", "launch", device, bundle], check=True, capture_output=True,
                        env={**__import__("os").environ, **environment})
-        time.sleep(6)
+        # A sheet slides up once the page has loaded.
+        time.sleep(12 if extra else 6)
         path = OUT / f"{name}{suffix}.png"
         # The simulator service may not write into a protected folder like
         # ~/Documents, so it captures to a temp file that's then moved in.

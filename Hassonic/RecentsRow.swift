@@ -36,7 +36,7 @@ private struct RecentTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            RecentArtwork(thumbnail: item.thumbnail, icon: item.icon ?? "music.note")
+            RecentArtwork(thumbnail: item.thumbnail, icon: MediaIcon.symbol(for: item))
                 .frame(width: Self.side, height: Self.side)
             Text(item.title)
                 .font(.caption.weight(.medium))
@@ -73,8 +73,10 @@ struct RecentArtwork: View {
 
     var body: some View {
         ZStack {
+            // Solid, not material: over the blurred artwork a material tile
+            // and its grey icon all but vanished.
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(.regularMaterial)
+                .fill(Color(.secondarySystemBackground))
             if let image {
                 Image(uiImage: image)
                     .resizable()
@@ -83,7 +85,7 @@ struct RecentArtwork: View {
             } else {
                 Image(systemName: icon)
                     .font(.system(size: 30, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.accentColor)
             }
         }
         .task(id: thumbnail) { await load() }
@@ -100,7 +102,9 @@ struct RecentArtwork: View {
             return
         }
         let request = homeAssistantRequest(for: url, baseURLString: haClient.baseURLString, accessToken: haClient.accessToken)
-        guard let (data, _) = try? await Self.session.data(for: request), !Task.isCancelled else { return }
+        guard let (data, response) = try? await Self.session.data(for: request), !Task.isCancelled else { return }
+        // An error page isn't a picture: the icon stays.
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return }
         image = UIImage(data: data)
     }
 }
