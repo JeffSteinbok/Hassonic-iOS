@@ -78,22 +78,37 @@ struct NowPlayingCard: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 0) {
-                // The whole cover, square, above the controls: never cropped to
-                // the card's shape and never under the title. A cover that isn't
-                // square is letterboxed. Capped so it stays sensible on iPad.
-                SquareArtwork(url: hasMedia ? presentation.artworkURL : nil, cornerRadius: 14) {
-                    if hasMedia {
+            ZStack(alignment: .bottom) {
+                if hasMedia {
+                    // The whole cover: the card is square (see below), so a
+                    // square cover fills it exactly, and one that isn't square
+                    // is letterboxed rather than cropped.
+                    SquareArtwork(url: presentation.artworkURL) {
                         Color.gray.opacity(0.3)
-                    } else {
-                        NowPlayingPlaceholderView()
-                            .background(Color(.secondarySystemBackground))
                     }
+                    // Bottom scrim: starts above centre so controls, progress, and
+                    // title/artist are always readable regardless of artwork brightness.
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0.20),
+                            .init(color: .black.opacity(0.92), location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    // Top scrim protects controls when artwork is bright near the top.
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black.opacity(0.45), location: 0.0),
+                            .init(color: .clear, location: 0.30)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                } else {
+                    Color(.systemBackground)
+                    NowPlayingPlaceholderView()
                 }
-                .frame(maxWidth: 420)
-                .shadow(color: hasMedia ? .black.opacity(0.35) : .clear, radius: 12, x: 0, y: 6)
-                .frame(maxWidth: .infinity)
-                .padding([.horizontal, .top])
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text(presentation.title ?? "Nothing Playing")
@@ -155,21 +170,14 @@ struct NowPlayingCard: View {
                     .opacity(hasMedia ? 1 : 0)
                     .allowsHitTesting(hasMedia)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
             }
-            .background {
-                if hasMedia {
-                    // The cover again, blurred and dimmed, so the white title and
-                    // controls below it read against any artwork.
-                    FillImage(url: presentation.artworkURL, fallback: .gray.opacity(0.3))
-                        .blur(radius: 40, opaque: true)
-                        .overlay(Color.black.opacity(0.45))
-                } else {
-                    Color(.systemBackground)
-                }
-            }
+            // Square, like the cover, so it's shown whole. Capped so the card
+            // doesn't get enormous on iPad.
+            .aspectRatio(1, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .frame(maxWidth: 420)
+            .frame(maxWidth: .infinity)
             .accessibilityIdentifier("now-playing-artwork-card")
 
             destinationButton
