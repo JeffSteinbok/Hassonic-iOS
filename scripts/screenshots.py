@@ -161,6 +161,36 @@ def album_art(path: Path):
     image.save(path)
 
 
+def cover(path: Path, top, bottom, size=(600, 600)):
+    """A two-tone gradient standing in for a cover. Not square when an
+    artist photo or station logo is wanted, to show it isn't cropped."""
+    image = Image.new("RGB", size)
+    draw = ImageDraw.Draw(image)
+    for y in range(size[1]):
+        t = y / size[1]
+        draw.line([(0, y), (size[0], y)], fill=tuple(int(a + (b - a) * t) for a, b in zip(top, bottom)))
+    draw.rectangle([size[0] // 4, size[1] // 4, size[0] * 3 // 4, size[1] * 3 // 4], outline=(255, 255, 255), width=8)
+    image.save(path)
+
+
+def recents(demo: Path) -> list:
+    """The Music tab's Recents row: a few made-up albums and playlists."""
+    entries = [
+        ("Long Light", "Album", (250, 170, 90), (160, 80, 150), (600, 600)),
+        ("Morning Coffee", "Playlist", (120, 80, 50), (230, 200, 150), (600, 600)),
+        ("Harbor Sessions", "Album", (40, 90, 160), (120, 200, 220), (600, 600)),
+        ("The Lanterns", "Artist", (60, 60, 70), (200, 160, 90), (900, 600)),
+        ("Dinner Jazz", "Playlist", (90, 20, 40), (220, 120, 80), (600, 600)),
+    ]
+    items = []
+    for index, (title, kind, top, bottom, size) in enumerate(entries):
+        path = demo / f"recent-{index}.png"
+        cover(path, top, bottom, size)
+        items.append({"contentType": kind.lower(), "contentId": f"demo:{kind.lower()}:{index}",
+                      "title": title, "subtitle": kind, "thumbnail": path.as_uri()})
+    return items
+
+
 def build(device_id):
     run("xcodegen", "generate")
     run("xcodebuild", "-project", "Hassonic.xcodeproj", "-scheme", "Hassonic", "-configuration", "Debug",
@@ -181,9 +211,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--only", help="One screen by name: " + ", ".join(name for name, _, _ in SCREENS))
+    parser.add_argument("--appearance", choices=["light", "dark"], default="light")
+    parser.add_argument("--no-recents", action="store_true", help="Leave the Music tab's Recents row empty")
+    parser.add_argument("--device", help="A simulator's UDID, instead of the first " + DEVICE)
     args = parser.parse_args()
 
-    device = simulator()
+    device = args.device or simulator()
     subprocess.run(["xcrun", "simctl", "boot", device], capture_output=True)
     run("xcrun", "simctl", "bootstatus", device)
     if not args.skip_build:
@@ -200,13 +233,17 @@ def main():
     now = datetime.now(timezone.utc)
     (demo / "demo-entities.json").write_text(json.dumps(entities(now, (demo / "album.png").as_uri())))
     (demo / "demo-history.json").write_text(json.dumps(history(now)))
+    (demo / "demo-recents.json").write_text(json.dumps([] if args.no_recents else recents(demo)))
     config = (DEMO / "demo-config.yaml").read_text().replace("{{DEMO}}", demo.as_uri())
     (documents / "config-override.yaml").write_text(config)
 
     # A clean status bar: 9:41, full signal and battery.
     run("xcrun", "simctl", "status_bar", device, "override", "--time", "9:41", "--batteryState", "charged",
         "--batteryLevel", "100", "--cellularBars", "4", "--wifiBars", "3")
-    run("xcrun", "simctl", "ui", device, "appearance", "light")
+    run("xcrun", "simctl", "ui", device, "appearance", args.appearance)
+    # A light, with-recents run writes the README's files; any other
+    # variant gets its own name beside them.
+    suffix = ("-dark" if args.appearance == "dark" else "") + ("-no-recents" if args.no_recents else "")
 
     OUT.mkdir(parents=True, exist_ok=True)
     for name, link, history_for in SCREENS:
@@ -219,7 +256,7 @@ def main():
         subprocess.run(["xcrun", "simctl", "launch", device, bundle], check=True, capture_output=True,
                        env={**__import__("os").environ, **environment})
         time.sleep(6)
-        path = OUT / f"{name}.png"
+        path = OUT / f"{name}{suffix}.png"
         # The simulator service may not write into a protected folder like
         # ~/Documents, so it captures to a temp file that's then moved in.
         with tempfile.TemporaryDirectory() as scratch:

@@ -7,6 +7,7 @@ import Foundation
 ///
 /// - `demo-entities.json`: the entity states to show, as Home Assistant
 ///   sends them, instead of connecting anywhere.
+/// - `demo-recents.json`: the Music tab's Recents, as `RecentMusicItem`s.
 /// - `demo-history.json`: `{ "person.x": [states…] }`, what the People
 ///   card's history sheet reads.
 ///
@@ -33,6 +34,13 @@ enum DemoMode {
         guard let directory,
               let data = try? Data(contentsOf: directory.appendingPathComponent("demo-entities.json")) else { return nil }
         return try? decoder.decode([HAEntityState].self, from: data)
+    }
+
+    /// `demo-recents.json`: the Music tab's Recents row.
+    static func recents() -> [RecentMusicItem]? {
+        guard let directory,
+              let data = try? Data(contentsOf: directory.appendingPathComponent("demo-recents.json")) else { return nil }
+        return try? JSONDecoder().decode([RecentMusicItem].self, from: data)
     }
 
     static func history(for entityId: String) -> [HAEntityState]? {

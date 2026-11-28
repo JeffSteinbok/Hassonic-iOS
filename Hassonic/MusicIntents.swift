@@ -206,6 +206,7 @@ enum MusicByVoice {
         UserDefaults.standard.set(source, forKey: StorageKeys.lastPlayOnSource(account: account.entityId))
         if let favorite {
             client.playMedia(account.entityId, contentType: favorite.contentType, contentId: favorite.contentId)
+            RecentMusicStore.shared.record(RecentMusic.item(from: favorite), account: account.entityId)
             return "Playing \(favorite.displayName) on \(zone.displayName)."
         }
         switch client.entity(account.entityId)?.state {

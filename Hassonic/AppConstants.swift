@@ -29,4 +29,9 @@ enum StorageKeys {
     static func lastPlayOnSource(account entityId: String) -> String {
         "lastPlayOnSourceName_\(entityId)"
     }
+
+    /// What was last played from the app on an account, newest first.
+    static func recentMusic(account entityId: String) -> String {
+        "hassonic.recentMusic_\(entityId)"
+    }
 }

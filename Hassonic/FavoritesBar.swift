@@ -5,6 +5,8 @@ struct FavoritesBar: View {
     let accountDisplayName: String
     let speakerClaim: SpeakerClaimConfig?
     let favorites: [MusicFavorite]
+    /// Recently played, newest first (see RecentMusicStore).
+    let recents: [RecentMusicItem]
     let zones: [MusicZone]
     /// Whether something is actually playing/paused right now — as opposed to
     /// `lastPlayOnSourceName` merely remembering a zone from some past
@@ -17,6 +19,10 @@ struct FavoritesBar: View {
 
     @EnvironmentObject private var haClient: HAWebSocketClient
     @StateObject private var favoriteRouter = FavoritePlaybackRouter()
+    private let recentStore = RecentMusicStore.shared
+    /// What a tap waiting on the Play On sheet will add to Recents once a
+    /// speaker is picked.
+    @State private var pendingRecent: RecentMusicItem?
     /// Keyed per-account (see init) — see NowPlayingCard's matching property
     /// for why this can't be a single shared key.
     @AppStorage("lastPlayOnSourceName") private var lastPlayOnSourceName: String = ""
@@ -27,52 +33,55 @@ struct FavoritesBar: View {
     /// cancels them so they can't switch back to the old one.
     @State private var resendTask: Task<Void, Never>?
 
-    init(mediaEntityId: String, accountDisplayName: String, speakerClaim: SpeakerClaimConfig?, favorites: [MusicFavorite], zones: [MusicZone], hasMedia: Bool) {
+    init(mediaEntityId: String, accountDisplayName: String, speakerClaim: SpeakerClaimConfig?, favorites: [MusicFavorite], recents: [RecentMusicItem], zones: [MusicZone], hasMedia: Bool) {
         self.mediaEntityId = mediaEntityId
         self.accountDisplayName = accountDisplayName
         self.speakerClaim = speakerClaim
         self.favorites = favorites
+        self.recents = recents
         self.zones = zones
         self.hasMedia = hasMedia
         self._lastPlayOnSourceName = AppStorage(wrappedValue: "", StorageKeys.lastPlayOnSource(account: mediaEntityId))
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(favorites) { favorite in
-                        Button {
-                            lightTapHaptic()
-                            resendTask?.cancel()
-                            if hasMedia, effectiveActiveSource != nil {
-                                // Already playing somewhere — just swap the track
-                                // in place, no need to ask where to play it again.
-                                haClient.playMedia(mediaEntityId, contentType: favorite.contentType, contentId: favorite.contentId)
-                            } else if favoriteRouter.requestPlay(.playMedia(
-                                contentType: favorite.contentType,
-                                contentId: favorite.contentId,
-                                displayName: favorite.displayName
-                            )) {
-                                showFavoritesSheet = true
-                            }
-                        } label: {
-                            Label(favorite.displayName, systemImage: favorite.icon)
-                                .font(.subheadline.weight(.medium))
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .foregroundStyle(.primary)
-                        }
-                        .buttonStyle(PressFeedbackIconButtonStyle())
-                    }
+        VStack(alignment: .leading, spacing: 12) {
+            if !recents.isEmpty {
+                sectionHeader("Recents")
+                RecentsRow(items: recents, onArtwork: hasMedia) { item in
+                    start(contentType: item.contentType, contentId: item.contentId,
+                          displayName: item.title, recent: item)
                 }
             }
+            if !favorites.isEmpty {
+                sectionHeader("Favorites")
+                    .padding(.top, recents.isEmpty ? 0 : 4)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(favorites) { favorite in
+                            Button {
+                                lightTapHaptic()
+                                start(contentType: favorite.contentType, contentId: favorite.contentId,
+                                      displayName: favorite.displayName, recent: RecentMusic.item(from: favorite))
+                            } label: {
+                                Label(favorite.displayName, systemImage: favorite.icon)
+                                    .font(.subheadline.weight(.medium))
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    .foregroundStyle(.primary)
+                            }
+                            .buttonStyle(PressFeedbackIconButtonStyle())
+                        }
+                    }
+                }
+                .accessibilityIdentifier("favorites-bar")
+            }
         }
-        .accessibilityIdentifier("favorites-bar")
         .sheet(isPresented: $showFavoritesSheet, onDismiss: {
             favoriteRouter.sheetDismissed(picked: playOnZonePicked) { action in
                 if case .playMedia(let contentType, let contentId, _) = action {
+                    if let pendingRecent { remember(pendingRecent) }
                     // When a switch was needed, PlayOnSheet already asked the
                     // voice assistant for this content by name (see
                     // desiredContentName). This resends the exact request over
@@ -92,6 +101,7 @@ struct FavoritesBar: View {
                 }
             }
             playOnZonePicked = false
+            pendingRecent = nil
         }) {
             PlayOnSheet(
                 mediaEntityId: mediaEntityId,
@@ -105,6 +115,45 @@ struct FavoritesBar: View {
                 desiredContentName: pendingContentDisplayName
             )
         }
+    }
+
+    /// Plays in place when something's already playing; otherwise asks
+    /// where, with the Play On sheet. Either way it lands in Recents.
+    private func start(contentType: String, contentId: String, displayName: String, recent: RecentMusicItem) {
+        resendTask?.cancel()
+        if hasMedia, effectiveActiveSource != nil {
+            // Already playing somewhere — just swap the track
+            // in place, no need to ask where to play it again.
+            haClient.playMedia(mediaEntityId, contentType: contentType, contentId: contentId)
+            remember(recent)
+        } else if favoriteRouter.requestPlay(.playMedia(
+            contentType: contentType,
+            contentId: contentId,
+            displayName: displayName
+        )) {
+            pendingRecent = recent
+            showFavoritesSheet = true
+        }
+    }
+
+    private func remember(_ item: RecentMusicItem) {
+        var item = item
+        item.playedAt = Date()
+        let account = mediaEntityId
+        recentStore.record(item, account: account)
+        guard item.thumbnail == nil else { return }
+        let client = haClient
+        Task {
+            await recentStore.fillArtwork(for: item.id, account: account) { type, id in
+                await client.browseMedia(entityId: account, mediaContentType: type, mediaContentId: id)
+            }
+        }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(hasMedia ? AnyShapeStyle(.white.opacity(0.65)) : AnyShapeStyle(.secondary))
     }
 
     private var effectiveActiveSource: String? {
