@@ -53,6 +53,7 @@ SCREENS = [
     ("room-music", "hassonic://living_room", {"HASSONIC_OPEN_SHEET": "room-music"}),
     ("play-on", "hassonic://music", {"HASSONIC_OPEN_SHEET": "play-on"}),
     ("browse", "hassonic://music", {"HASSONIC_OPEN_SHEET": "browse"}),
+    ("play-something-else", "hassonic://music", {"HASSONIC_OPEN_SHEET": "play-something-else"}),
     ("browse-playlists", "hassonic://music",
      {"HASSONIC_OPEN_SHEET": "browse", "HASSONIC_BROWSE_AT": "current_user_playlists"}),
     ("browse-artists", "hassonic://music",
@@ -139,6 +140,34 @@ def entities(now: datetime, album_art: str) -> list:
         state("sensor.rileys_iphone_geocoded_location", "7201 E Green Lake Dr N\nSeattle WA 98115\nUnited States"),
         state("sensor.rileys_iphone_activity", "Walking"),
     ]
+
+
+# What the Music tab is showing, for --music-state. `single` is the default
+# household: Alex's Spotify on the Kitchen speaker.
+MUSIC_STATES = ["idle", "single", "group", "mixed"]
+
+
+def music_state(entities_list: list, which: str) -> list:
+    """`idle`: nothing on the account. `group`: playing on Downstairs (Kitchen
+    and Living Room). `mixed`: the Kitchen as usual, and the Patio speaker
+    playing the radio on its own."""
+    by_id = {entity["entity_id"]: entity for entity in entities_list}
+    spotify = by_id["media_player.spotify_alex"]
+    if which == "idle":
+        spotify["state"] = "idle"
+        for key in ["media_title", "media_artist", "media_album_name", "media_content_id", "entity_picture",
+                    "media_duration", "media_position", "media_position_updated_at", "source"]:
+            spotify["attributes"].pop(key, None)
+        by_id["media_player.kitchen_speaker"]["state"] = "idle"
+    elif which == "group":
+        spotify["attributes"]["source"] = "Downstairs"
+        for entity_id in ["media_player.living_room_speaker", "media_player.downstairs"]:
+            by_id[entity_id]["state"] = "playing"
+    elif which == "mixed":
+        patio = by_id["media_player.patio_speaker"]
+        patio["state"] = "playing"
+        patio["attributes"].update({"media_title": "Morning Edition", "media_artist": "KUOW"})
+    return entities_list
 
 
 def history(now: datetime) -> dict:
@@ -284,6 +313,9 @@ def main():
     parser.add_argument("--wide-cover", action="store_true", help="Play a 16:9 cover instead of a square one")
     parser.add_argument("--tv-source", metavar="SOURCE",
                         help="What the Living Room TV is showing, e.g. Netflix (the remote opens on its apps)")
+    parser.add_argument("--music-state", choices=MUSIC_STATES,
+                        help="What's playing: nothing (idle), the Kitchen (single), a group, or the Kitchen and a "
+                             "speaker on its own (mixed). Default: single")
     parser.add_argument("--device", help="A simulator's UDID, instead of the first " + DEVICE)
     args = parser.parse_args()
 
@@ -302,7 +334,7 @@ def main():
     album_art(demo / "album.png", wide=args.wide_cover)
 
     now = datetime.now(timezone.utc)
-    demo_entities = entities(now, (demo / "album.png").as_uri())
+    demo_entities = music_state(entities(now, (demo / "album.png").as_uri()), args.music_state or "single")
     if args.tv_source:
         for entity in demo_entities:
             if entity["entity_id"] == "media_player.living_room_tv":
@@ -314,6 +346,11 @@ def main():
     config = (DEMO / "demo-config.yaml").read_text().replace("{{DEMO}}", demo.as_uri())
     (documents / "config-override.yaml").write_text(config)
 
+    # Where the account last played: Home Assistant leaves `source` out
+    # while idle, and the app remembers it.
+    subprocess.run(["xcrun", "simctl", "spawn", device, "defaults", "write", bundle,
+                    "lastPlayOnSourceName_media_player.spotify_alex", "Kitchen"], capture_output=True)
+
     # A clean status bar: 9:41, full signal and battery.
     run("xcrun", "simctl", "status_bar", device, "override", "--time", "9:41", "--batteryState", "charged",
         "--batteryLevel", "100", "--cellularBars", "4", "--wifiBars", "3")
@@ -322,7 +359,8 @@ def main():
     # variant gets its own name beside them.
     suffix = ("-dark" if args.appearance == "dark" else "") + ("-no-recents" if args.no_recents else "") \
         + ("-start-volume" if args.start_volume else "") + ("-wide-cover" if args.wide_cover else "") \
-        + (f"-{args.tv_source.lower().replace(' ', '-')}" if args.tv_source else "")
+        + (f"-{args.tv_source.lower().replace(' ', '-')}" if args.tv_source else "") \
+        + (f"-{args.music_state}" if args.music_state else "")
 
     OUT.mkdir(parents=True, exist_ok=True)
     for name, link, extra in SCREENS:

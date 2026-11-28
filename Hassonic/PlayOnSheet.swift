@@ -11,7 +11,7 @@ struct PlayOnSheet: View {
     /// Set when this pick required an actual Alexa account switch, as opposed
     /// to the zone already being on this account — callers use this to decide
     /// whether the just-picked content needs the drop-resistant resend (see
-    /// FavoritesBar's onDismiss).
+    /// MusicStarter.sheetDismissed).
     @Binding var zoneSwitchedAccount: Bool
     /// Human-speakable name of the specific content being requested (e.g.
     /// "Taylor Swift"), if this pick came from a favorite — when set, a

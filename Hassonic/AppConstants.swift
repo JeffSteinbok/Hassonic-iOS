@@ -30,6 +30,11 @@ enum StorageKeys {
         "lastPlayOnSourceName_\(entityId)"
     }
 
+    /// The speaker picked on the Music tab's start layout for an account.
+    static func musicStartTarget(account entityId: String) -> String {
+        "musicStartTarget_\(entityId)"
+    }
+
     /// What was last played from the app on an account, newest first.
     static func recentMusic(account entityId: String) -> String {
         "hassonic.recentMusic_\(entityId)"
