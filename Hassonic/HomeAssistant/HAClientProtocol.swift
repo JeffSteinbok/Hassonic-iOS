@@ -46,6 +46,7 @@ protocol HAClientProtocol: ObservableObject {
     func claimSpeaker(using config: SpeakerClaimConfig, account: String, speaker: String, contentName: String?, onStatus: @escaping (String) -> Void) async -> SpeakerClaimOutcome
     func browseMedia(entityId: String, mediaContentType: String?, mediaContentId: String?) async -> HABrowseMediaResult
     func playMedia(_ entityId: String, contentType: String, contentId: String)
+    func playMediaChecked(_ entityId: String, contentType: String, contentId: String) async -> HAServiceCallResult
     func mediaPlayPause(_ entityId: String)
     func mediaNextTrack(_ entityId: String)
     func mediaPreviousTrack(_ entityId: String)

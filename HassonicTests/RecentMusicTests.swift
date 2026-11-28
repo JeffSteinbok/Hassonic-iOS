@@ -146,4 +146,89 @@ final class RecentMusicTests: XCTestCase {
         }
         XCTAssertEqual(store.items(for: "acct").map(\.id), ["a", "spotify:track:7"])
     }
+
+    // MARK: - Missing art
+
+    func testPlaylistWithoutArtLooksItUpOnce() async throws {
+        let suite = "RecentMusicTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let store = RecentMusicStore(defaults: defaults)
+        store.record(item("spotify:playlist:road"), account: "acct")
+        store.record(item("spotify:playlist:art", thumbnail: "https://i.scdn.co/a"), account: "acct")
+        let playlist = try node("""
+        {"title": "Road Trip", "media_class": "playlist", "thumbnail": "https://i.scdn.co/road", "can_play": true}
+        """)
+        var asked: [String?] = []
+        let browse: (String?, String?) async -> HABrowseMediaResult = { _, id in
+            asked.append(id)
+            return HABrowseMediaResult(success: true, result: playlist, error: nil)
+        }
+        await store.fillMissingArtwork(account: "acct", browse: browse)
+        await store.fillMissingArtwork(account: "acct", browse: browse)
+
+        XCTAssertEqual(asked, ["spotify:playlist:road"], "Only the one missing art, and only once")
+        let road = store.items(for: "acct").first { $0.id == "spotify:playlist:road" }
+        XCTAssertEqual(road?.thumbnail, "https://i.scdn.co/road")
+    }
+
+    func testNoArtAndNoIconStillShowsATypeIcon() {
+        let blank = RecentMusicItem(contentType: "playlist", contentId: "spotify:playlist:1", title: "Road Trip")
+        XCTAssertEqual(MediaIcon.symbol(for: blank), "music.note.list")
+        let track = RecentMusicItem(contentType: "spotify://track", contentId: "spotify:track:1", title: "Song")
+        XCTAssertEqual(MediaIcon.symbol(for: track), "music.note")
+        var broken = blank
+        broken.icon = "not.a.real.symbol"
+        XCTAssertEqual(MediaIcon.symbol(for: broken), "music.note.list", "A misspelled config icon would draw nothing")
+        broken.icon = "cup.and.saucer.fill"
+        XCTAssertEqual(MediaIcon.symbol(for: broken), "cup.and.saucer.fill", "A favorite keeps its own icon")
+    }
+
+    // MARK: - Browse icons
+
+    private func folder(_ id: String, _ title: String, children: String) throws -> HABrowseMediaNode {
+        try node("""
+        {"title": "\(title)", "media_class": "directory", "media_content_type": "\(id)", "media_content_id": "\(id)",
+         "can_play": false, "can_expand": true, "children_media_class": "\(children)"}
+        """)
+    }
+
+    func testEachSpotifyCategoryHasItsOwnIcon() throws {
+        let categories: [(String, String, String, String)] = [
+            ("current_user_playlists", "Playlists", "playlist", "music.note.list"),
+            ("current_user_followed_artists", "Artists", "artist", "music.mic"),
+            ("current_user_saved_albums", "Albums", "album", "square.stack"),
+            ("current_user_saved_tracks", "Liked songs", "track", "heart"),
+            ("current_user_saved_shows", "Podcasts", "podcast", "mic"),
+            ("current_user_recently_played", "Recently played", "track", "clock"),
+            ("current_user_top_artists", "Top Artists", "artist", "chart.line.uptrend.xyaxis"),
+            ("current_user_top_tracks", "Top Tracks", "track", "chart.bar"),
+            ("categories", "Categories", "genre", "square.grid.2x2"),
+            ("featured_playlists", "Featured Playlists", "playlist", "star"),
+            ("new_releases", "New Releases", "album", "sparkles"),
+        ]
+        var seen = Set<String>()
+        for (id, title, children, symbol) in categories {
+            let icon = MediaIcon.symbol(for: try folder(id, title, children: children))
+            XCTAssertEqual(icon, symbol, title)
+            seen.insert(icon)
+        }
+        XCTAssertEqual(seen.count, categories.count, "No two categories share an icon")
+    }
+
+    func testAnUnknownFolderGoesByWhatItHolds() throws {
+        XCTAssertEqual(MediaIcon.symbol(for: try folder("x_1", "Mixes", children: "playlist")), "music.note.list")
+        XCTAssertEqual(MediaIcon.symbol(for: try folder("x_2", "Stuff", children: "directory")), "folder")
+    }
+
+    func testAnItemGoesByItsClassNotItsTitle() throws {
+        let playlist = try node("""
+        {"title": "Top 50 Recent Hits", "media_class": "playlist", "media_content_type": "spotify://playlist",
+         "media_content_id": "spotify:playlist:9", "can_play": true, "can_expand": true}
+        """)
+        XCTAssertEqual(MediaIcon.symbol(for: playlist), "music.note.list")
+        XCTAssertTrue(MediaIcon.isArtist("artist"))
+        XCTAssertFalse(MediaIcon.isArtist("album"))
+    }
 }

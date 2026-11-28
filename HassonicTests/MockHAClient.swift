@@ -69,6 +69,20 @@ final class MockHAClient: ObservableObject, HAClientProtocol {
         serviceCallLog.append(("playMedia:\(contentType):\(contentId)", entityId))
     }
 
+    /// What `playMediaChecked` answers; tests set it to a failure.
+    var playMediaResult = HAServiceCallResult(success: true, error: nil)
+    /// Applied when `playMediaChecked` succeeds, as Home Assistant's next state.
+    var stateAfterPlay: HAEntityState?
+
+    func playMediaChecked(_ entityId: String, contentType: String, contentId: String) async -> HAServiceCallResult {
+        serviceCallLog.append(("playMediaChecked:\(contentType):\(contentId)", entityId))
+        if playMediaResult.success, let stateAfterPlay {
+            entities.removeAll { $0.entityId == stateAfterPlay.entityId }
+            entities.append(stateAfterPlay)
+        }
+        return playMediaResult
+    }
+
     func mediaPlayPause(_ entityId: String) { serviceCallLog.append(("mediaPlayPause", entityId)) }
     func mediaNextTrack(_ entityId: String) { serviceCallLog.append(("mediaNextTrack", entityId)) }
     func mediaPreviousTrack(_ entityId: String) { serviceCallLog.append(("mediaPreviousTrack", entityId)) }

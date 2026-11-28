@@ -6,6 +6,8 @@ struct MusicZonesView: View {
     @State private var showingMediaBrowser = false
     @StateObject private var transitionManager = NowPlayingTransitionManager()
     @ObservedObject private var recentStore = RecentMusicStore.shared
+    /// Browse picks: their Play On sheet comes up over Browse.
+    @StateObject private var browseStarter = MusicStarter()
 
     @EnvironmentObject private var configuration: AppConfigurationLoader
 
@@ -168,12 +170,27 @@ struct MusicZonesView: View {
             }
             .sheet(isPresented: $showingMediaBrowser) {
                 if let selectedAccount {
-                    MediaBrowserSheet(entityId: selectedAccount.entityId)
+                    MediaBrowserSheet(entityId: selectedAccount.entityId) { node in
+                        guard let request = MusicStartRequest(node: node) else { return }
+                        let context = MusicStartContext(
+                            accountEntityId: selectedAccount.entityId,
+                            accountDisplayName: selectedAccount.displayName,
+                            speakerClaim: configuration.speakerClaim,
+                            zones: selectedAccount.zones,
+                            hasMedia: hasMedia)
+                        browseStarter.start(request, context: context, client: haClient) {
+                            showingMediaBrowser = false
+                        }
+                    }
+                    .musicStartFlow(browseStarter)
                 }
             }
         }
         .task {
             transitionManager.update(entity: mediaEntity, baseURLString: haClient.baseURLString)
+            #if DEBUG && targetEnvironment(simulator)
+            if DemoMode.openSheet == "browse" { showingMediaBrowser = true }
+            #endif
         }
         // The service's own "Recently played", each time the tab opens or
         // the account or connection changes.
@@ -204,6 +221,9 @@ struct MusicZonesView: View {
         #endif
         let client = haClient
         await recentStore.refreshFromService(account: account) { type, id in
+            await client.browseMedia(entityId: account, mediaContentType: type, mediaContentId: id)
+        }
+        await recentStore.fillMissingArtwork(account: account) { type, id in
             await client.browseMedia(entityId: account, mediaContentType: type, mediaContentId: id)
         }
     }
@@ -255,214 +275,6 @@ struct MusicZonesView: View {
         return "Switch between the \(list) accounts"
     }
 
-    private struct MediaBrowserSheet: View {
-        @EnvironmentObject private var haClient: HAWebSocketClient
-        @Environment(\.dismiss) private var dismiss
-        @Environment(\.openURL) private var openURL
-        let entityId: String
-
-        @State private var rootNode: HABrowseMediaNode?
-        @State private var isLoading = false
-        @State private var errorMessage: String?
-        @State private var showPlaybackGuidance = false
-
-        @EnvironmentObject private var configuration: AppConfigurationLoader
-
-        var body: some View {
-            NavigationStack {
-                Group {
-                    if isLoading {
-                        ProgressView("Loading media...")
-                    } else if showPlaybackGuidance {
-                        let provider = configuration.mediaProvider
-                        ContentUnavailableView {
-                            Label(
-                                provider.map { "Start \($0.name) First" } ?? "Start Playback First",
-                                systemImage: "music.note"
-                            )
-                        } description: {
-                            Text(
-                                provider.map {
-                                    "Start playing something in \($0.name), then try Media Browser again."
-                                } ?? "Start playing something on this speaker, then try Media Browser again."
-                            )
-                        } actions: {
-                            Button("Retry") { Task { await loadRoot() } }
-                            if let provider, let appURL = provider.appURL {
-                                Button("Open \(provider.name)") { openURL(appURL) }
-                            }
-                        }
-                    } else if let errorMessage {
-                        ContentUnavailableView {
-                            Label("Browsing Unavailable", systemImage: "exclamationmark.triangle")
-                        } description: {
-                            Text(errorMessage)
-                        } actions: {
-                            Button("Retry") { Task { await loadRoot() } }
-                        }
-                    } else if let rootNode {
-                        MediaBrowserNodeList(entityId: entityId, node: rootNode)
-                    } else {
-                        ContentUnavailableView("No Media Available", systemImage: "music.note.list", description: Text("This player returned no browseable items."))
-                    }
-                }
-                .navigationTitle("Browse Media")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Close") { dismiss() }
-                    }
-                }
-            }
-            .task { await loadRoot() }
-        }
-
-        private func loadRoot() async {
-            guard !isLoading else { return }
-            isLoading = true
-            showPlaybackGuidance = false
-            errorMessage = nil
-            defer { isLoading = false }
-
-            let response = await haClient.browseMedia(entityId: entityId, mediaContentType: nil, mediaContentId: nil)
-            if response.success, let node = response.result {
-                rootNode = node
-            } else {
-                rootNode = nil
-                if MediaBrowseFailure.needsPlayback(playerState: haClient.entity(entityId)?.state, error: response.error) {
-                    showPlaybackGuidance = true
-                } else {
-                    errorMessage = response.error?.message ?? "This media player does not support browsing."
-                }
-            }
-        }
-    }
-
-    private struct MediaBrowserNodeList: View {
-        @EnvironmentObject private var haClient: HAWebSocketClient
-        let entityId: String
-        let node: HABrowseMediaNode
-
-        var body: some View {
-            List {
-                if node.isPlayable, let contentType = node.mediaContentType, let contentId = node.mediaContentId {
-                    Button {
-                        haClient.playMedia(entityId, contentType: contentType, contentId: contentId)
-                        RecentMusic.item(from: node).map { RecentMusicStore.shared.record($0, account: entityId) }
-                    } label: {
-                        Label("Play \(node.displayTitle)", systemImage: "play.fill")
-                    }
-                }
-
-                if let children = node.children, !children.isEmpty {
-                    ForEach(children) { child in
-                        MediaBrowserNodeRow(entityId: entityId, node: child)
-                    }
-                } else if node.canBrowseChildren {
-                    Text("No items in this category.")
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .navigationTitle(node.displayTitle)
-            .navigationBarTitleDisplayMode(.inline)
-        }
-    }
-
-    private struct MediaBrowserNodeRow: View {
-        @EnvironmentObject private var haClient: HAWebSocketClient
-        let entityId: String
-        let node: HABrowseMediaNode
-        @State private var loadedNode: HABrowseMediaNode?
-        @State private var isLoading = false
-        @State private var errorMessage: String?
-
-        var body: some View {
-            Group {
-                if node.canBrowseChildren {
-                    NavigationLink {
-                        MediaBrowserDestinationView(
-                            entityId: entityId,
-                            initialNode: node,
-                            loadedNode: $loadedNode,
-                            isLoading: $isLoading,
-                            errorMessage: $errorMessage
-                        )
-                    } label: {
-                        nodeLabel(node)
-                    }
-                } else if node.isPlayable, let contentType = node.mediaContentType, let contentId = node.mediaContentId {
-                    Button {
-                        haClient.playMedia(entityId, contentType: contentType, contentId: contentId)
-                        RecentMusic.item(from: node).map { RecentMusicStore.shared.record($0, account: entityId) }
-                    } label: {
-                        nodeLabel(node)
-                    }
-                } else {
-                    nodeLabel(node)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-
-        private func nodeLabel(_ node: HABrowseMediaNode) -> some View {
-            HStack(spacing: 12) {
-                BrowseThumbnailImage(
-                    thumbnailPath: node.thumbnail,
-                    baseURLString: haClient.baseURLString,
-                    accessToken: haClient.accessToken
-                )
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(node.displayTitle)
-                    if let mediaClass = node.mediaClass, !mediaClass.isEmpty {
-                        Text(mediaClass.replacingOccurrences(of: "_", with: " ").capitalized)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
-    }
-
-    private struct MediaBrowserDestinationView: View {
-        @EnvironmentObject private var haClient: HAWebSocketClient
-        let entityId: String
-        let initialNode: HABrowseMediaNode
-        @Binding var loadedNode: HABrowseMediaNode?
-        @Binding var isLoading: Bool
-        @Binding var errorMessage: String?
-
-        private var activeNode: HABrowseMediaNode {
-            loadedNode ?? initialNode
-        }
-
-        var body: some View {
-            Group {
-                if isLoading {
-                    ProgressView("Loading...")
-                } else if let errorMessage {
-                    ContentUnavailableView("Unable to Open", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
-                } else {
-                    MediaBrowserNodeList(entityId: entityId, node: activeNode)
-                }
-            }
-            .task { await loadIfNeeded() }
-        }
-
-        private func loadIfNeeded() async {
-            guard loadedNode == nil else { return }
-            guard let contentType = initialNode.mediaContentType, let contentId = initialNode.mediaContentId else { return }
-            isLoading = true
-            defer { isLoading = false }
-            let response = await haClient.browseMedia(entityId: entityId, mediaContentType: contentType, mediaContentId: contentId)
-            if response.success, let node = response.result {
-                loadedNode = node
-                errorMessage = nil
-            } else {
-                errorMessage = response.error?.message ?? "No content returned."
-            }
-        }
-    }
-
     @ViewBuilder
     private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()
@@ -490,38 +302,6 @@ enum PendingPlayAction {
     /// separate API call lands afterward — see PlayOnSheet.performSwitch.
     case playMedia(contentType: String, contentId: String, displayName: String)
 }
-
-/// Routes a favorite tap to the Play On sheet, enforcing that:
-/// - The sheet is always shown (never bypassed by a stale remembered source).
-/// - A pending action cannot be overwritten while the sheet is open.
-@MainActor
-final class FavoritePlaybackRouter: ObservableObject {
-    @Published private(set) var pendingAction: PendingPlayAction?
-    @Published private(set) var showSheet: Bool = false
-
-    /// Attempts to queue `action` and present the destination sheet.
-    /// Returns `false` if a tap is already pending (duplicate-tap prevention).
-    @discardableResult
-    func requestPlay(_ action: PendingPlayAction) -> Bool {
-        guard pendingAction == nil else { return false }
-        pendingAction = action
-        showSheet = true
-        return true
-    }
-
-    /// Called when the sheet is dismissed. Fires `onConfirm` only when the
-    /// user explicitly selected a destination.
-    func sheetDismissed(picked: Bool, onConfirm: (PendingPlayAction) -> Void) {
-        defer {
-            pendingAction = nil
-            showSheet = false
-        }
-        if picked, let action = pendingAction {
-            onConfirm(action)
-        }
-    }
-}
-
 
 #Preview {
     MusicZonesView()
