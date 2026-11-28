@@ -78,48 +78,17 @@ struct NowPlayingCard: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            ZStack(alignment: .bottom) {
+            // The hero art: a square card the cover fills edge to edge
+            // (cropped to the square if it isn't one). The text and controls
+            // sit at the bottom on a gradient behind them only.
+            NowPlayingHeroSquare(showsScrim: hasMedia) {
                 if hasMedia {
-                    // The card is wider than it is tall, so the cover can't fill
-                    // it without cropping. The same art, blurred, fills the card;
-                    // the whole cover sits on it, fitted into a square as tall as
-                    // the card. Art that isn't square just shows more backdrop.
                     FillImage(url: presentation.artworkURL, fallback: .gray.opacity(0.3))
-                        .blur(radius: 30, opaque: true)
-                        .overlay(Color.black.opacity(0.2))
-                    Color.clear
-                        .aspectRatio(1, contentMode: .fit)
-                        .overlay {
-                            AsyncImage(url: presentation.artworkURL) { phase in
-                                if case .success(let image) = phase {
-                                    image.resizable().scaledToFit()
-                                }
-                            }
-                        }
-                    // Bottom scrim: starts above centre so controls, progress, and
-                    // title/artist are always readable regardless of artwork brightness.
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0.20),
-                            .init(color: .black.opacity(0.92), location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    // Top scrim protects controls when artwork is bright near the top.
-                    LinearGradient(
-                        stops: [
-                            .init(color: .black.opacity(0.45), location: 0.0),
-                            .init(color: .clear, location: 0.30)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
                 } else {
                     Color(.systemBackground)
                     NowPlayingPlaceholderView()
                 }
-
+            } overlay: {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(presentation.title ?? "Nothing Playing")
                         .font(.title3.weight(.semibold))
@@ -181,9 +150,8 @@ struct NowPlayingCard: View {
                     .allowsHitTesting(hasMedia)
                 }
                 .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(height: 320)
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .accessibilityIdentifier("now-playing-artwork-card")
 
             // The strip is there even while hidden (it watches for a start),
@@ -196,6 +164,10 @@ struct NowPlayingCard: View {
                 StartVolumeStrip(accountEntityId: mediaEntityId, zones: zones)
             }
         }
+        // On iPad the card stops at a comfortable size and centres; the rows
+        // under it keep its width.
+        .frame(maxWidth: NowPlayingHero.maxSide)
+        .frame(maxWidth: .infinity)
         .sheet(isPresented: $showingPlayOnSheet, onDismiss: {
             router.musicShowPlayOn = false
             if playOnZonePicked, let action = pendingPlayAction {

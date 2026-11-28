@@ -136,6 +136,52 @@ struct SquareArtwork<Placeholder: View>: View {
     }
 }
 
+/// Sizes for the Music tab's Now Playing card.
+enum NowPlayingHero {
+    /// The card is square and as wide as the page, up to this (on iPad).
+    static let maxSide: CGFloat = 420
+    static let cornerRadius: CGFloat = 20
+    /// How far the gradient reaches above the text, so the first line isn't
+    /// on its clear end.
+    static let scrimLead: CGFloat = 48
+}
+
+/// The Now Playing card: a square, as wide as it's offered up to
+/// `NowPlayingHero.maxSide`. `artwork` fills it edge to edge (give it a view
+/// that fills, like `FillImage`). `overlay` is pinned to the bottom, and the
+/// darkening gradient sits only behind it, so the rest of the cover shows
+/// as it is.
+struct NowPlayingHeroSquare<Artwork: View, Overlay: View>: View {
+    var showsScrim: Bool
+    @ViewBuilder var artwork: () -> Artwork
+    @ViewBuilder var overlay: () -> Overlay
+
+    var body: some View {
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay { ZStack { artwork() } }
+            .overlay(alignment: .bottom) {
+                overlay()
+                    .background(alignment: .bottom) {
+                        if showsScrim {
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .clear, location: 0),
+                                    .init(color: .black.opacity(0.45), location: 0.3),
+                                    .init(color: .black.opacity(0.75), location: 1)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .padding(.top, -NowPlayingHero.scrimLead)
+                        }
+                    }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: NowPlayingHero.cornerRadius, style: .continuous))
+            .frame(maxWidth: NowPlayingHero.maxSide)
+    }
+}
+
 private let thumbnailSize: CGFloat = 44
 
 /// Resolves and loads a Browse-node thumbnail, with the HA token only when

@@ -156,15 +156,17 @@ def history(now: datetime) -> dict:
     return {"person.sam": records}
 
 
-def album_art(path: Path):
-    """A plain gradient square, standing in for a record sleeve."""
-    size = 600
-    image = Image.new("RGB", (size, size))
+def album_art(path: Path, wide=False):
+    """A plain gradient, standing in for a record sleeve: square, or 16:9 like
+    a video thumbnail when `wide`."""
+    width, height = (1066, 600) if wide else (600, 600)
+    image = Image.new("RGB", (width, height))
     draw = ImageDraw.Draw(image)
-    for y in range(size):
-        t = y / size
-        draw.line([(0, y), (size, y)], fill=(int(250 - 90 * t), int(170 - 90 * t), int(90 + 60 * t)))
-    draw.ellipse([150, 150, 450, 450], fill=(255, 226, 160))
+    for y in range(height):
+        t = y / height
+        draw.line([(0, y), (width, y)], fill=(int(250 - 90 * t), int(170 - 90 * t), int(90 + 60 * t)))
+    middle = width // 2
+    draw.ellipse([middle - 150, 150, middle + 150, 450], fill=(255, 226, 160))
     image.save(path)
 
 
@@ -273,6 +275,7 @@ def main():
     parser.add_argument("--no-recents", action="store_true", help="Leave the Music tab's Recents row empty")
     parser.add_argument("--start-volume", metavar="ZONE",
                         help="Show the volume strip a start brings up, for this zone (e.g. media_player.kitchen_speaker)")
+    parser.add_argument("--wide-cover", action="store_true", help="Play a 16:9 cover instead of a square one")
     parser.add_argument("--device", help="A simulator's UDID, instead of the first " + DEVICE)
     args = parser.parse_args()
 
@@ -288,7 +291,7 @@ def main():
     demo = documents / "demo"
     demo.mkdir(parents=True, exist_ok=True)
     shutil.copy(DEMO / "living-room.png", demo / "living-room.png")
-    album_art(demo / "album.png")
+    album_art(demo / "album.png", wide=args.wide_cover)
 
     now = datetime.now(timezone.utc)
     (demo / "demo-entities.json").write_text(json.dumps(entities(now, (demo / "album.png").as_uri())))
@@ -305,7 +308,7 @@ def main():
     # A light, with-recents run writes the README's files; any other
     # variant gets its own name beside them.
     suffix = ("-dark" if args.appearance == "dark" else "") + ("-no-recents" if args.no_recents else "") \
-        + ("-start-volume" if args.start_volume else "")
+        + ("-start-volume" if args.start_volume else "") + ("-wide-cover" if args.wide_cover else "")
 
     OUT.mkdir(parents=True, exist_ok=True)
     for name, link, extra in SCREENS:
