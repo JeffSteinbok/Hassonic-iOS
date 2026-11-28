@@ -52,6 +52,8 @@ pages:
       - cards:
           - type: alarm
             entity: alarm_control_panel.home_alarm
+          - type: llm_vision_timeline
+            title: Cameras
 
   - id: living_room
     title: Living Room

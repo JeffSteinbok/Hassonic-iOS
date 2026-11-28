@@ -48,6 +48,7 @@ SCREENS = [
     ("music", "hassonic://music", {}),
     ("remote", "hassonic://remote", {}),
     ("security", "hassonic://security", {}),
+    ("security-event", "hassonic://security", {"HASSONIC_OPEN_EVENT": "demo-event-2"}),
     ("people", "hassonic://people", {}),
     ("history", "hassonic://people", {"HASSONIC_OPEN_HISTORY": "person.sam"}),
     ("room-music", "hassonic://living_room", {"HASSONIC_OPEN_SHEET": "room-music"}),
@@ -101,6 +102,10 @@ def entities(now: datetime, album_art: str) -> list:
         state("sensor.living_room_temperature", "71", {"unit_of_measurement": "°F"}),
         state("sensor.living_room_humidity", "44", {"unit_of_measurement": "%"}),
         state("cover.awning", "open", {"friendly_name": "Awning", "current_position": 100, "supported_features": 15}),
+        # Camera streams named the way integrations name them; the app
+        # shows "Front Door", not the stream.
+        state("camera.front_door_high", "idle", {"friendly_name": "Front Door High"}),
+        state("camera.backyard_left_fluent", "idle", {"friendly_name": "Backyard Left Fluent"}),
         state("alarm_control_panel.home_alarm", "armed_home", {
             "friendly_name": "Home Alarm", "supported_features": 63, "code_arm_required": False}),
         state("media_player.living_room_tv", "on", {
@@ -189,6 +194,59 @@ def history(now: datetime) -> dict:
     records.append(state("person.sam", "Work", {"latitude": WORK[0], "longitude": WORK[1]},
                          changed=lunch + timedelta(minutes=45)))
     return {"person.sam": records}
+
+
+# (day offset, hour, minute, camera, title, category, description, frame colors)
+TIMELINE = [
+    (0, 9, 20, "camera.front_door_high", "Package delivered", "package",
+     "A courier in a blue jacket left a brown box on the front step and walked back to a white van.",
+     ((120, 150, 190), (150, 120, 90))),
+    (0, 8, 5, "camera.backyard_left_fluent", "Person in the backyard", "person",
+     "Someone in a grey hoodie crossed the lawn toward the side gate, then went back inside the house.",
+     ((90, 140, 200), (70, 120, 60))),
+    (0, 7, 12, "camera.driveway_snapshots_2", "Car leaving", "vehicle",
+     "A silver hatchback backed out of the driveway and drove off to the left.",
+     ((170, 160, 150), (90, 90, 95))),
+    (1, 17, 42, "camera.front_door_high", "Visitor at the door", "person",
+     "A person rang the doorbell, waited about a minute, and left a flyer in the door handle.",
+     ((230, 150, 90), (110, 90, 80))),
+    (1, 13, 5, "camera.backyard_left_fluent", "Cat on the fence", "animal",
+     "An orange cat walked along the back fence and jumped down into the neighbour's yard.",
+     ((110, 170, 220), (80, 130, 70))),
+    (1, 6, 30, "camera.driveway_snapshots_2", "No activity", None,
+     "The driveway was empty; only the trees moved in the wind.",
+     ((60, 70, 100), (60, 60, 65))),
+    (2, 21, 15, "camera.front_door_high", "Car in the driveway", "vehicle",
+     "Headlights swept across the porch as a dark SUV pulled into the driveway and parked.",
+     ((25, 30, 60), (45, 45, 55))),
+]
+
+
+def timeline(demo: Path) -> dict:
+    """A few days of camera events, at fixed times so "Today" reads the same
+    whenever the script runs; each with a drawn key frame."""
+    frames = demo / "frames"
+    frames.mkdir(exist_ok=True)
+    today = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+    events = []
+    for index, (days, hour, minute, camera, title, category, description, (sky, ground)) in enumerate(TIMELINE, 1):
+        path = frames / f"event-{index}.png"
+        image = Image.new("RGB", (800, 450))
+        draw = ImageDraw.Draw(image)
+        for y in range(450):
+            colour = sky if y < 270 else ground
+            shade = 1 - 0.25 * (y % 270) / 270
+            draw.line([(0, y), (800, y)], fill=tuple(int(c * shade) for c in colour))
+        draw.rectangle([520, 140, 760, 300], fill=tuple(int(c * 0.7) for c in ground))
+        draw.polygon([(500, 140), (640, 70), (780, 140)], fill=tuple(int(c * 0.5) for c in ground))
+        image.save(path)
+        start = today - timedelta(days=days) + timedelta(hours=hour, minutes=minute)
+        events.append({
+            "uid": f"demo-event-{index}", "title": title, "description": description,
+            "start": stamp(start), "end": stamp(start + timedelta(seconds=30)),
+            "key_frame": path.as_uri(), "camera_name": camera, "category": category, "label": None,
+        })
+    return {"events": events}
 
 
 def album_art(path: Path, wide=False):
@@ -341,6 +399,7 @@ def main():
                 entity["attributes"]["source"] = args.tv_source
     (demo / "demo-entities.json").write_text(json.dumps(demo_entities))
     (demo / "demo-history.json").write_text(json.dumps(history(now)))
+    (demo / "demo-timeline.json").write_text(json.dumps(timeline(demo)))
     (demo / "demo-browse.json").write_text(json.dumps(browse(demo)))
     (demo / "demo-recents.json").write_text(json.dumps([] if args.no_recents else recents(demo)))
     config = (DEMO / "demo-config.yaml").read_text().replace("{{DEMO}}", demo.as_uri())

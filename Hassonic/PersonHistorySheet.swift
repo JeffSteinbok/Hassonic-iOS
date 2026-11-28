@@ -20,10 +20,7 @@ struct PersonHistorySheet: View {
     @State private var position: MapCameraPosition = .automatic
     @State private var selectedStay: PersonHistory.Stay.ID?
 
-    private var days: [Date] {
-        let today = Calendar.current.startOfDay(for: .now)
-        return (0..<Self.dayCount).compactMap { Calendar.current.date(byAdding: .day, value: -$0, to: today) }
-    }
+    private var days: [Date] { DayStrip.recentDays(Self.dayCount) }
 
     var body: some View {
         NavigationStack {
@@ -120,40 +117,6 @@ struct PersonHistorySheet: View {
     }
 }
 
-/// "Today", "Yesterday", then "Sat 10" back as far as history goes.
-private struct DayStrip: View {
-    let days: [Date]
-    @Binding var selection: Date
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(days, id: \.self) { day in
-                    let isSelected = day == selection
-                    Button { selection = day } label: {
-                        Text(label(for: day))
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .foregroundStyle(isSelected ? Color.white : Color.primary)
-                            .background(isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.thinMaterial), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(isSelected ? .isSelected : [])
-                }
-            }
-            .padding(.horizontal)
-        }
-    }
-
-    private func label(for day: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(day) { return "Today" }
-        if calendar.isDateInYesterday(day) { return "Yesterday" }
-        return day.formatted(.dateTime.weekday(.abbreviated).day())
-    }
-}
-
 /// One stay: the place, when, and for how long.
 private struct StayRow: View {
     let stay: PersonHistory.Stay
@@ -177,15 +140,7 @@ private struct StayRow: View {
                 .font(.subheadline.monospacedDigit())
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(isSelected ? tint : .clear, lineWidth: 2)
-        }
-        .contentShape(Rectangle())
+        .historyRow(isSelected: isSelected, tint: tint)
         .accessibilityElement(children: .combine)
     }
 
